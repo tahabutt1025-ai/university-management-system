@@ -167,9 +167,10 @@ const seed = async () => {
 
   // ─── Attendance ───
   console.log('🔄 Generating attendance records...');
-  const startDate = new Date('2024-09-01');
   const today = new Date();
-  let attendanceCount = 0;
+  const startDate = new Date();
+  startDate.setDate(today.getDate() - 30);
+  const attendanceDocs = [];
 
   for (const { student, enrolledCourses } of students) {
     for (const course of enrolledCourses) {
@@ -182,11 +183,8 @@ const seed = async () => {
         const hasClass = course.schedule?.some(s => s.day === dayName);
 
         if (hasClass && current.getDay() >= 1 && current.getDay() <= 5) {
-          // Simulate some students being at-risk (higher absence rate)
           const isAtRiskStudent = students.indexOf(students.find(s => s.student._id.toString() === student._id.toString())) < 4;
           const absenceRate = isAtRiskStudent ? 0.4 : 0.15;
-
-          // Monday absence pattern for at-risk students
           const isMondayProne = isAtRiskStudent && current.getDay() === 1;
           const rand = Math.random();
           let status;
@@ -195,29 +193,29 @@ const seed = async () => {
           else if (rand < absenceRate + 0.08) status = 'late';
           else status = 'present';
 
-          try {
-            const attDate = new Date(current);
-            attDate.setHours(0, 0, 0, 0);
-            await Attendance.create({
-              student: student._id,
-              course: course._id,
-              markedBy: teacher.teacher._id,
-              date: attDate,
-              status
-            });
-            attendanceCount++;
-          } catch (e) { /* Skip duplicates */ }
+          const attDate = new Date(current);
+          attDate.setHours(0, 0, 0, 0);
+          attendanceDocs.push({
+            student: student._id,
+            course: course._id,
+            markedBy: teacher.teacher._id,
+            date: attDate,
+            status
+          });
         }
-
         current.setDate(current.getDate() + 1);
       }
     }
   }
-  console.log(`✅ ${attendanceCount} attendance records created`);
+
+  if (attendanceDocs.length > 0) {
+    await Attendance.insertMany(attendanceDocs, { ordered: false }).catch(() => {});
+  }
+  console.log(`✅ ${attendanceDocs.length} attendance records created`);
 
   // ─── Grades ───
   console.log('🔄 Generating grades...');
-  let gradeCount = 0;
+  const gradeDocs = [];
   const gradeExamTypes = ['Quiz', 'Assignment', 'Midterm', 'Final'];
   const gradeWeightages = { Quiz: 5, Assignment: 10, Midterm: 35, Final: 50 };
 
@@ -230,28 +228,27 @@ const seed = async () => {
 
       for (const examType of gradeExamTypes) {
         const totalMarks = examType === 'Final' ? 100 : examType === 'Midterm' ? 60 : examType === 'Assignment' ? 20 : 15;
-        
-        // At-risk students get lower marks, potentially declining
         let baseMarks = isAtRiskStudent ? randomBetween(20, 50) : randomBetween(55, 95);
         const marksObtained = Math.min(baseMarks, totalMarks);
 
-        try {
-          await Grade.create({
-            student: student._id,
-            course: course._id,
-            gradedBy: teacher.teacher._id,
-            examType,
-            marksObtained,
-            totalMarks,
-            weightage: gradeWeightages[examType] || 0,
-            examDate: randomDate(new Date('2024-09-15'), today)
-          });
-          gradeCount++;
-        } catch (e) { /* Skip */ }
+        gradeDocs.push({
+          student: student._id,
+          course: course._id,
+          gradedBy: teacher.teacher._id,
+          examType,
+          marksObtained,
+          totalMarks,
+          weightage: gradeWeightages[examType] || 0,
+          examDate: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), today)
+        });
       }
     }
   }
-  console.log(`✅ ${gradeCount} grade records created`);
+
+  if (gradeDocs.length > 0) {
+    await Grade.insertMany(gradeDocs, { ordered: false }).catch(() => {});
+  }
+  console.log(`✅ ${gradeDocs.length} grade records created`);
 
   // ─── Assignments ───
   const assignmentTitles = [
@@ -276,28 +273,30 @@ const seed = async () => {
   console.log(`✅ ${courses.length} assignments created`);
 
   // ─── Fees ───
-  let feeCount = 0;
+  const feeDocs = [];
   for (const { student } of students) {
     const feeTypes = ['Tuition', 'Library', 'Examination'];
     for (const feeType of feeTypes) {
       const amount = feeType === 'Tuition' ? 50000 : feeType === 'Library' ? 2000 : 3000;
       const isPaid = Math.random() > 0.3;
-      await Fee.create({
+      feeDocs.push({
         student: student._id,
         feeType,
         amount,
         dueDate: new Date('2024-10-31'),
         status: isPaid ? 'paid' : 'unpaid',
         paidAmount: isPaid ? amount : 0,
-        paidDate: isPaid ? randomDate(new Date('2024-09-01'), new Date()) : undefined,
+        paidDate: isPaid ? randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()) : undefined,
         semester: student.semester,
         academicYear: '2024-2025',
         paymentMethod: isPaid ? randomFrom(['Cash', 'Bank Transfer', 'Online']) : undefined
       });
-      feeCount++;
     }
   }
-  console.log(`✅ ${feeCount} fee records created`);
+  if (feeDocs.length > 0) {
+    await Fee.insertMany(feeDocs);
+  }
+  console.log(`✅ ${feeDocs.length} fee records created`);
 
   // ─── Notifications ───
   const adminNotifications = [
