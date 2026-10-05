@@ -52,7 +52,15 @@ const PrivateRoute = ({ children, allowedRoles }) => {
 };
 
 const RoleRedirect = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="loading-overlay" style={{ minHeight: '100vh' }}>
+        <div className="loading-spinner" />
+        <p>Loading UMS...</p>
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
   return <Navigate to={`/${user.role}/dashboard`} replace />;
 };
@@ -64,8 +72,8 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<RoleRedirect />} />
 
-      {/* App Layout wrapper */}
-      <Route path="/" element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+      {/* App Layout wrapper (pathless layout route) */}
+      <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
         {/* Admin Routes */}
         <Route path="admin/dashboard" element={<PrivateRoute allowedRoles={['admin']}><AdminDashboard /></PrivateRoute>} />
         <Route path="admin/users" element={<PrivateRoute allowedRoles={['admin']}><AdminUsers /></PrivateRoute>} />
