@@ -1,0 +1,23 @@
+# Render.com Deployment Configuration
+# This file tells Render how to run your backend
+
+services:
+  - type: web
+    name: university-management-api
+    env: node
+    region: singapore  # Closest to Pakistan
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false  # Set this manually in Render dashboard
+      - key: JWT_SECRET
+        generateValue: true  # Auto-generate
+      - key: JWT_EXPIRE
+        value: 7d
+      - key: CLIENT_URL
+        sync: false  # Set to your Vercel URL
