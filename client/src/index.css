@@ -1068,3 +1068,74 @@ body {
   .auth-card { padding: 24px 20px; }
   .page-header { flex-direction: column; gap: 12px; }
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ACCESSIBILITY — keyboard focus ring
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Remove focus ring for mouse users (not keyboard) */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Skip-to-content link (for screen readers / keyboard users) */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 8px;
+  background: var(--primary-600);
+  color: white;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  z-index: 9999;
+  transition: top 0.2s;
+}
+.skip-link:focus { top: 8px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   PRINT STYLES — results, transcripts, fee receipts
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+@media print {
+  /* Hide non-essential chrome */
+  .sidebar,
+  .topbar,
+  .btn,
+  .notif-btn,
+  .page-header .btn,
+  nav { display: none !important; }
+
+  /* Reset layout for print */
+  .main-content { margin-left: 0 !important; }
+  .page-container { padding: 0 !important; }
+  .app-layout { display: block !important; }
+
+  body {
+    background: white !important;
+    color: #000 !important;
+    font-size: 12pt;
+  }
+
+  .card {
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  .data-table th,
+  .data-table td {
+    border: 1px solid #ccc !important;
+  }
+
+  a { color: #000 !important; text-decoration: underline; }
+
+  /* Show URL after links when printing */
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9pt; }
+}

@@ -9,7 +9,7 @@ const pageNames = {
   '/admin/users': { title: 'User Management', sub: 'Manage students, teachers, and admins' },
   '/admin/courses': { title: 'Course Management', sub: 'Manage academic courses & schedules' },
   '/admin/fees': { title: 'Fee Management', sub: 'Track payments and fee records' },
-  '/admin/analytics': { title: 'AI Analytics', sub: 'Intelligent insights & at-risk detection' },
+  '/admin/analytics': { title: 'Analytics', sub: 'Student performance insights & at-risk detection' },
   '/teacher/dashboard': { title: 'Dashboard', sub: 'Your teaching overview' },
   '/teacher/attendance': { title: 'Mark Attendance', sub: 'Record daily class attendance' },
   '/teacher/grades': { title: 'Grades Management', sub: 'Upload and manage student grades' },

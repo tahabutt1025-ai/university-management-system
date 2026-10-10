@@ -124,9 +124,17 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
 
 // @route   GET /api/fees/student/:studentId/summary
 // @desc    Get fee summary for a student
-// @access  Admin, Teacher, Student (own)
+// @access  Admin — OR Student (own record only)
 router.get('/student/:studentId/summary', protect, async (req, res) => {
   try {
+    // Ownership enforcement: students can only view their own fees
+    if (req.user.role === 'student') {
+      const student = await Student.findOne({ user: req.user._id }).select('_id');
+      if (!student || student._id.toString() !== req.params.studentId) {
+        return res.status(403).json({ success: false, message: 'Access denied: you can only view your own fee records.' });
+      }
+    }
+
     const fees = await Fee.find({ student: req.params.studentId });
 
     const summary = {

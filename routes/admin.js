@@ -156,18 +156,31 @@ router.put('/users/:id', protect, authorize('admin'), async (req, res) => {
 });
 
 // @route   DELETE /api/admin/users/:id
-// @desc    Delete user
+// @desc    Deactivate a user (soft delete — preserves all academic records)
 // @access  Admin
 router.delete('/users/:id', protect, authorize('admin'), async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    // Guard: admin cannot deactivate their own account
+    if (req.params.id === req.user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'You cannot deactivate your own account.' });
+    }
+
+    const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Remove profile
-    if (user.role === 'student') await Student.findOneAndDelete({ user: user._id });
-    if (user.role === 'teacher') await Teacher.findOneAndDelete({ user: user._id });
+    // Guard: prevent removing the last active admin
+    if (user.role === 'admin') {
+      const activeAdminCount = await User.countDocuments({ role: 'admin', isActive: true });
+      if (activeAdminCount <= 1) {
+        return res.status(400).json({ success: false, message: 'Cannot deactivate the last admin account.' });
+      }
+    }
 
-    res.json({ success: true, message: 'User deleted successfully' });
+    // Soft delete — preserve all student/teacher records
+    user.isActive = false;
+    await user.save({ validateBeforeSave: false });
+
+    res.json({ success: true, message: 'User deactivated. All academic records are preserved.' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

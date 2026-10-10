@@ -1,7 +1,7 @@
 {
   "version": 2,
   "buildCommand": "npm install && cd client && npm install && npm run build",
-  "outputDirectory": "dist",
+  "outputDirectory": "client/dist",
   "installCommand": "npm install",
   "functions": {
     "api/index.js": {
@@ -16,6 +16,25 @@
     {
       "source": "/(.*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        }
+      ]
     }
   ]
 }

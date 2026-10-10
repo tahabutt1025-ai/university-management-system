@@ -12,7 +12,7 @@ const adminNav = [
   { label: 'Users', icon: Users, path: '/admin/users' },
   { label: 'Courses', icon: BookOpen, path: '/admin/courses' },
   { label: 'Fee Management', icon: CreditCard, path: '/admin/fees' },
-  { label: 'AI Analytics', icon: Brain, path: '/admin/analytics' }
+  { label: 'Analytics', icon: Brain, path: '/admin/analytics' }
 ];
 
 const teacherNav = [
@@ -107,7 +107,7 @@ export default function AppLayout() {
       {/* Main Content */}
       <div className="main-content">
         <Topbar />
-        <div className="page-container animate-fadeIn">
+        <div id="main-content" className="page-container animate-fadeIn">
           <Outlet />
         </div>
       </div>

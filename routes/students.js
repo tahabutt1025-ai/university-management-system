@@ -8,8 +8,31 @@ const Grade = require('../models/Grade');
 const Fee = require('../models/Fee');
 const Assignment = require('../models/Assignment');
 
+// ── Helper: resolve caller's own student ID ────────────────
+async function getCallerStudentId(req) {
+  if (req.user.role === 'student') {
+    const s = await Student.findOne({ user: req.user._id }).select('_id');
+    return s ? s._id.toString() : null;
+  }
+  return null; // admins/teachers have no student ID
+}
+
+// ── Helper: enforce data-ownership for student endpoints ──
+// Admins and teachers may view any student.
+// Students may only view their own record.
+async function enforceOwnership(req, res, requestedStudentId) {
+  if (req.user.role === 'admin' || req.user.role === 'teacher') return true;
+
+  const ownId = await getCallerStudentId(req);
+  if (!ownId || ownId !== requestedStudentId.toString()) {
+    res.status(403).json({ success: false, message: 'Access denied: you can only view your own records.' });
+    return false;
+  }
+  return true;
+}
+
 // @route   GET /api/students
-// @desc    Get all students
+// @desc    Get all students (paginated, searchable)
 // @access  Admin, Teacher
 router.get('/', protect, authorize('admin', 'teacher'), async (req, res) => {
   try {
@@ -18,8 +41,6 @@ router.get('/', protect, authorize('admin', 'teacher'), async (req, res) => {
 
     if (department) query.department = department;
     if (semester) query.semester = parseInt(semester);
-
-    let students = Student.find(query).populate('user', 'name email phone avatar isActive');
 
     if (search) {
       const users = await User.find({
@@ -33,14 +54,14 @@ router.get('/', protect, authorize('admin', 'teacher'), async (req, res) => {
         { user: { $in: userIds } },
         { rollNumber: { $regex: search, $options: 'i' } }
       ];
-      students = Student.find(query).populate('user', 'name email phone avatar isActive');
     }
 
     const total = await Student.countDocuments(query);
-    const result = await students
+    const result = await Student.find(query)
+      .populate('user', 'name email phone avatar isActive')
+      .populate('enrolledCourses', 'courseName courseCode')
       .skip((page - 1) * limit)
-      .limit(parseInt(limit))
-      .populate('enrolledCourses', 'courseName courseCode');
+      .limit(parseInt(limit));
 
     res.json({
       success: true,
@@ -76,7 +97,7 @@ router.get('/me', protect, authorize('student'), async (req, res) => {
 
 // @route   GET /api/students/:id
 // @desc    Get student by ID
-// @access  Admin, Teacher, Student (own)
+// @access  Admin, Teacher — OR Student (own record only)
 router.get('/:id', protect, async (req, res) => {
   try {
     const student = await Student.findById(req.params.id)
@@ -86,6 +107,10 @@ router.get('/:id', protect, async (req, res) => {
     if (!student) {
       return res.status(404).json({ success: false, message: 'Student not found' });
     }
+
+    // Ownership check — students may only fetch their own record
+    if (!(await enforceOwnership(req, res, student._id))) return;
+
     res.json({ success: true, student });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -94,17 +119,31 @@ router.get('/:id', protect, async (req, res) => {
 
 // @route   PUT /api/students/:id
 // @desc    Update student profile
-// @access  Admin, Student (own)
+// @access  Admin — OR Student (own record only, limited fields)
 router.put('/:id', protect, async (req, res) => {
   try {
-    const student = await Student.findByIdAndUpdate(req.params.id, req.body, {
-      new: true, runValidators: true
-    }).populate('user', 'name email');
-
+    const student = await Student.findById(req.params.id);
     if (!student) {
       return res.status(404).json({ success: false, message: 'Student not found' });
     }
-    res.json({ success: true, student });
+
+    // Ownership check
+    if (!(await enforceOwnership(req, res, student._id))) return;
+
+    // Students cannot change their own roll number, department, or semester
+    if (req.user.role === 'student') {
+      delete req.body.rollNumber;
+      delete req.body.department;
+      delete req.body.semester;
+      delete req.body.section;
+      delete req.body.enrolledCourses;
+    }
+
+    const updated = await Student.findByIdAndUpdate(req.params.id, req.body, {
+      new: true, runValidators: true
+    }).populate('user', 'name email');
+
+    res.json({ success: true, student: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -112,9 +151,15 @@ router.put('/:id', protect, async (req, res) => {
 
 // @route   GET /api/students/:id/attendance-summary
 // @desc    Get attendance summary for a student
-// @access  Student (own), Teacher, Admin
+// @access  Admin, Teacher — OR Student (own record only)
 router.get('/:id/attendance-summary', protect, async (req, res) => {
   try {
+    const student = await Student.findById(req.params.id).select('_id');
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+    if (!(await enforceOwnership(req, res, student._id))) return;
+
     const { courseId } = req.query;
     let matchQuery = { student: req.params.id };
     if (courseId) matchQuery.course = courseId;
@@ -127,16 +172,12 @@ router.get('/:id/attendance-summary', protect, async (req, res) => {
     attendance.forEach(record => {
       const cId = record.course._id.toString();
       if (!summary[cId]) {
-        summary[cId] = {
-          course: record.course,
-          total: 0, present: 0, absent: 0, late: 0, excused: 0
-        };
+        summary[cId] = { course: record.course, total: 0, present: 0, absent: 0, late: 0, excused: 0 };
       }
       summary[cId].total++;
       summary[cId][record.status]++;
     });
 
-    // Calculate percentages
     const result = Object.values(summary).map(s => ({
       ...s,
       attendancePercentage: s.total > 0 ? ((s.present + s.late) / s.total * 100).toFixed(1) : '0.0'
@@ -150,9 +191,15 @@ router.get('/:id/attendance-summary', protect, async (req, res) => {
 
 // @route   GET /api/students/:id/grades-summary
 // @desc    Get grades summary for a student
-// @access  Student (own), Teacher, Admin
+// @access  Admin, Teacher — OR Student (own record only)
 router.get('/:id/grades-summary', protect, async (req, res) => {
   try {
+    const student = await Student.findById(req.params.id).select('_id');
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+    if (!(await enforceOwnership(req, res, student._id))) return;
+
     const grades = await Grade.find({ student: req.params.id })
       .populate('course', 'courseName courseCode')
       .sort('-examDate');
@@ -180,8 +227,8 @@ router.get('/:id/grades-summary', protect, async (req, res) => {
 
     const result = Object.values(summary).map(s => ({
       ...s,
-      overallPercentage: s.totalWeightage > 0 
-        ? (s.totalWeightedScore / s.totalWeightage).toFixed(1) 
+      overallPercentage: s.totalWeightage > 0
+        ? (s.totalWeightedScore / s.totalWeightage).toFixed(1)
         : s.grades.length > 0
           ? (s.grades.reduce((acc, g) => acc + parseFloat(g.percentage), 0) / s.grades.length).toFixed(1)
           : '0.0'

@@ -72,9 +72,9 @@ export default function AdminAnalytics() {
       <div className="page-header">
         <div className="page-header-left">
           <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Brain size={28} color="var(--primary-400)" /> AI Analytics Engine
+            <Brain size={28} color="var(--primary-400)" /> Analytics
           </h1>
-          <p>Intelligent pattern detection & student performance insights</p>
+          <p>Student performance insights &amp; at-risk detection (rules-based)</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary" onClick={fetchData}>
@@ -200,7 +200,7 @@ export default function AdminAnalytics() {
                         border: '1px solid rgba(99,102,241,0.2)', borderRadius: 12, marginBottom: 20
                       }}>
                         <div style={{ fontSize: 11, color: 'var(--primary-400)', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          🤖 AI Natural Language Insight
+                          📊 Insight <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 10, color: 'var(--text-muted)', marginLeft: 6 }}>(rules-based calculation)</span>
                         </div>
                         <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>
                           {studentAnalytics.aiInsight}

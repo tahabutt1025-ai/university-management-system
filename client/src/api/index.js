@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 const API = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -14,14 +15,17 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 globally
+// Handle 401 (session expired) and 403 (forbidden) globally
 API.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('ums_token');
       localStorage.removeItem('ums_user');
-      window.location.href = '/login';
+      toast.error('Your session has expired. Please sign in again.', { id: 'session-expired' });
+      setTimeout(() => { window.location.href = '/login'; }, 1500);
+    } else if (error.response?.status === 403) {
+      toast.error('You do not have permission to perform this action.', { id: 'forbidden' });
     }
     return Promise.reject(error);
   }

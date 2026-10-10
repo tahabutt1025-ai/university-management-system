@@ -1,0 +1,15 @@
+User-agent: *
+Disallow: /admin
+Disallow: /admin/
+Disallow: /teacher
+Disallow: /teacher/
+Disallow: /student
+Disallow: /student/
+Disallow: /profile
+Disallow: /notifications
+Disallow: /api/
+
+Allow: /login
+Allow: /
+
+# No sitemap yet — add one when a public landing page is created

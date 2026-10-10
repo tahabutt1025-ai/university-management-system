@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Home } from 'lucide-react';
+import { ShieldOff, LogIn } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-export default function NotFoundPage() {
+export default function UnauthorizedPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const handleHome = () => {
+  const handleBack = () => {
     if (user) {
       navigate(`/${user.role}/dashboard`, { replace: true });
     } else {
@@ -27,21 +27,21 @@ export default function NotFoundPage() {
         padding: 20,
       }}
     >
-      {/* Big 404 */}
+      {/* 403 number */}
       <div
         style={{
           fontSize: 80,
           fontWeight: 900,
-          background: 'var(--gradient-primary)',
+          background: 'var(--gradient-danger)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           lineHeight: 1,
         }}
       >
-        404
+        403
       </div>
 
-      <GraduationCap size={48} color="var(--text-muted)" style={{ margin: '20px 0' }} />
+      <ShieldOff size={48} color="var(--text-muted)" style={{ margin: '20px 0' }} />
 
       <h1
         style={{
@@ -51,7 +51,7 @@ export default function NotFoundPage() {
           color: 'var(--text-primary)',
         }}
       >
-        Page Not Found
+        Access Denied
       </h1>
       <p
         style={{
@@ -61,16 +61,16 @@ export default function NotFoundPage() {
           maxWidth: 400,
         }}
       >
-        The page you&apos;re looking for doesn&apos;t exist or you don&apos;t have
-        access to it. Please check the URL or return home.
+        You don&apos;t have permission to view this page. Please contact your
+        administrator if you believe this is a mistake.
       </p>
 
       <div style={{ display: 'flex', gap: 12 }}>
         <button className="btn btn-ghost btn-lg" onClick={() => navigate(-1)}>
           ← Go Back
         </button>
-        <button className="btn btn-primary btn-lg" onClick={handleHome}>
-          <Home size={16} /> Go Home
+        <button className="btn btn-primary btn-lg" onClick={handleBack}>
+          <LogIn size={16} /> Go to Dashboard
         </button>
       </div>
 
