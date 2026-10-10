@@ -95,8 +95,14 @@ app.use('/api/', apiLimiter);
 // ─── DB Connection (cached for serverless) ───────────────────
 const connectDB = async () => {
   if (mongoose.connection.readyState >= 1) return;
+  if (!process.env.MONGO_URI) {
+    console.error('❌ MONGO_URI is not defined in environment variables');
+    return;
+  }
   try {
-    await mongoose.connect(process.env.MONGO_URI);
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000
+    });
     if (process.env.NODE_ENV !== 'production') {
       console.log('✅ MongoDB Connected');
     }
@@ -124,7 +130,7 @@ app.use('/api/analytics',     require('./routes/analytics'));
 app.use('/api/notifications', require('./routes/notifications'));
 
 // ─── Health check ────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/health'], (req, res) => {
   res.json({
     status: 'OK',
     message: 'UMS API is running',
