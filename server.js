@@ -9,24 +9,45 @@ require('dotenv').config();
 
 const app = express();
 
-// ─── Security headers (helmet) ──────────────────────────────
+// ─── Trust proxy (required for rate-limit on Vercel/serverless) ─
+app.set('trust proxy', 1);
+
+// ─── Security headers (helmet) ───────────────────────────────────
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Set CSP via Vercel headers; helmet default blocks CDN fonts
+    contentSecurityPolicy: false,     // Set via Vercel headers; default blocks CDN fonts
     crossOriginEmbedderPolicy: false
   })
 );
 
-// ─── CORS — restrict to real front-end origin ───────────────
-const ALLOWED_ORIGINS = (process.env.FRONTEND_URL || 'http://localhost:5173')
-  .split(',')
-  .map((o) => o.trim());
+// ─── CORS ────────────────────────────────────────────────────────
+// Build the allow-list from env vars + Vercel auto-vars
+const buildAllowedOrigins = () => {
+  const origins = new Set(['http://localhost:5173', 'http://localhost:3000']);
+
+  // Explicit list from FRONTEND_URL (comma-separated)
+  if (process.env.FRONTEND_URL) {
+    process.env.FRONTEND_URL.split(',').forEach(o => origins.add(o.trim()));
+  }
+  // Vercel auto-injects VERCEL_URL for the current deployment
+  if (process.env.VERCEL_URL) {
+    origins.add(`https://${process.env.VERCEL_URL}`);
+  }
+  return origins;
+};
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow same-origin / server-side requests (no origin header)
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      // Allow same-origin / server-side / curl requests (no Origin header)
+      if (!origin) return callback(null, true);
+
+      const allowed = buildAllowedOrigins();
+
+      // Allow any *.vercel.app preview URL (covers branch and PR previews)
+      const isVercelPreview = /^https:\/\/[\w-]+\.vercel\.app$/.test(origin);
+
+      if (allowed.has(origin) || isVercelPreview) {
         return callback(null, true);
       }
       callback(new Error(`CORS: origin '${origin}' not allowed`));
@@ -38,6 +59,7 @@ app.use(
 );
 
 app.use(compression());
+
 
 // Only log in non-production or when explicitly enabled
 if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_HTTP_LOGS === 'true') {
