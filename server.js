@@ -90,7 +90,7 @@ const apiLimiter = rateLimit({
 
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
-app.use('/api/', apiLimiter);
+app.use('/api', apiLimiter);
 
 // ─── DB Connection (cached for serverless) ───────────────────
 const connectDB = async () => {
@@ -140,7 +140,7 @@ app.get(['/api/health', '/health'], (req, res) => {
 });
 
 // ─── 404 for unknown API routes ───────────────────────────────
-app.use('/api/*', (req, res) => {
+app.use('/api', (req, res) => {
   res.status(404).json({ success: false, message: 'API route not found.' });
 });
 
