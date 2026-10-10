@@ -136,4 +136,18 @@ export const notificationsAPI = {
   delete: (id) => API.delete(`/notifications/${id}`)
 };
 
+// ─── AI Alert System ───
+export const alertsAPI = {
+  getRules: () => API.get('/alerts/rules'),
+  updateRule: (id, data) => API.put(`/alerts/rules/${id}`, data),
+  runEngine: () => API.post('/alerts/run'),
+  getHistory: (params) => API.get('/alerts', { params }),
+  previewRule: (ruleCode) => API.post('/alerts/preview', { ruleCode }),
+  retryAlert: (id) => API.post(`/alerts/${id}/retry`),
+  sendTest: () => API.post('/alerts/test-send'),
+  getStats: () => API.get('/alerts/stats'),
+  getMyPreferences: () => API.get('/alerts/preferences/me'),
+  updateMyPreferences: (data) => API.put('/alerts/preferences/me', data)
+};
+
 export default API;

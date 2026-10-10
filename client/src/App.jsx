@@ -17,6 +17,9 @@ import AdminUsers from './pages/admin/AdminUsers';
 import AdminCourses from './pages/admin/AdminCourses';
 import AdminFees from './pages/admin/AdminFees';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
+import AlertSettings from './pages/admin/AlertSettings';
+import AlertHistory from './pages/admin/AlertHistory';
+import NotificationPreferences from './pages/student/NotificationPreferences';
 
 // Teacher Pages
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
@@ -91,7 +94,9 @@ function AppRoutes() {
         <Route path="admin/users"      element={<PrivateRoute allowedRoles={['admin']}><AdminUsers /></PrivateRoute>} />
         <Route path="admin/courses"    element={<PrivateRoute allowedRoles={['admin']}><AdminCourses /></PrivateRoute>} />
         <Route path="admin/fees"       element={<PrivateRoute allowedRoles={['admin']}><AdminFees /></PrivateRoute>} />
-        <Route path="admin/analytics"  element={<PrivateRoute allowedRoles={['admin']}><AdminAnalytics /></PrivateRoute>} />
+        <Route path="admin/analytics"       element={<PrivateRoute allowedRoles={['admin']}><AdminAnalytics /></PrivateRoute>} />
+        <Route path="admin/alerts/settings" element={<PrivateRoute allowedRoles={['admin']}><AlertSettings /></PrivateRoute>} />
+        <Route path="admin/alerts/history"  element={<PrivateRoute allowedRoles={['admin']}><AlertHistory /></PrivateRoute>} />
 
         {/* Teacher */}
         <Route path="teacher/dashboard"   element={<PrivateRoute allowedRoles={['teacher']}><TeacherDashboard /></PrivateRoute>} />
@@ -107,8 +112,9 @@ function AppRoutes() {
         <Route path="student/assignments" element={<PrivateRoute allowedRoles={['student']}><StudentAssignments /></PrivateRoute>} />
 
         {/* Shared */}
-        <Route path="profile"       element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
-        <Route path="notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
+        <Route path="profile"                element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
+        <Route path="notifications"          element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
+        <Route path="settings/notifications" element={<PrivateRoute><NotificationPreferences /></PrivateRoute>} />
       </Route>
 
       {/* ── 404 catch-all ────────────────────────────────────── */}

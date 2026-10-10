@@ -4,7 +4,7 @@ import Topbar from './Topbar';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, Brain,
   ClipboardList, Star, Calendar, FileText, GraduationCap,
-  Settings, LogOut, ChevronRight
+  Settings, LogOut, ChevronRight, ShieldAlert, History, Bell
 } from 'lucide-react';
 
 const adminNav = [
@@ -12,7 +12,9 @@ const adminNav = [
   { label: 'Users', icon: Users, path: '/admin/users' },
   { label: 'Courses', icon: BookOpen, path: '/admin/courses' },
   { label: 'Fee Management', icon: CreditCard, path: '/admin/fees' },
-  { label: 'Analytics', icon: Brain, path: '/admin/analytics' }
+  { label: 'Analytics', icon: Brain, path: '/admin/analytics' },
+  { label: 'AI Alert Rules', icon: ShieldAlert, path: '/admin/alerts/settings' },
+  { label: 'Alert History', icon: History, path: '/admin/alerts/history' }
 ];
 
 const teacherNav = [
@@ -27,7 +29,8 @@ const studentNav = [
   { label: 'My Attendance', icon: Calendar, path: '/student/attendance' },
   { label: 'My Grades', icon: Star, path: '/student/grades' },
   { label: 'Assignments', icon: ClipboardList, path: '/student/assignments' },
-  { label: 'Fee Status', icon: CreditCard, path: '/student/fees' }
+  { label: 'Fee Status', icon: CreditCard, path: '/student/fees' },
+  { label: 'Notifications', icon: Bell, path: '/settings/notifications' }
 ];
 
 const navMap = { admin: adminNav, teacher: teacherNav, student: studentNav };

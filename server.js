@@ -128,6 +128,7 @@ app.use('/api/assignments',   require('./routes/assignments'));
 app.use('/api/fees',          require('./routes/fees'));
 app.use('/api/analytics',     require('./routes/analytics'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/alerts',        require('./routes/alerts'));
 
 // ─── Health check ────────────────────────────────────────────
 app.get(['/api/health', '/health'], (req, res) => {
