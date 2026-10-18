@@ -37,7 +37,9 @@ export const authAPI = {
   register: (data) => API.post('/auth/register', data),
   getMe: () => API.get('/auth/me'),
   updateProfile: (data) => API.put('/auth/updateprofile', data),
-  updatePassword: (data) => API.put('/auth/updatepassword', data)
+  updatePassword: (data) => API.put('/auth/updatepassword', data),
+  forgotPassword: (email) => API.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password) => API.post(`/auth/reset-password/${token}`, { password })
 };
 
 // ─── Students ───
@@ -78,6 +80,7 @@ export const coursesAPI = {
   update: (id, data) => API.put(`/courses/${id}`, data),
   delete: (id) => API.delete(`/courses/${id}`),
   enroll: (id, studentId) => API.post(`/courses/${id}/enroll`, { studentId }),
+  enrollBulk: (id, studentIds) => API.post(`/courses/${id}/enroll-bulk`, { studentIds }),
   unenroll: (id, studentId) => API.delete(`/courses/${id}/enroll/${studentId}`)
 };
 

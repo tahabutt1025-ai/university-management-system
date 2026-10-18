@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { attendanceAPI, teachersAPI, coursesAPI } from '../../api';
+import { attendanceAPI, teachersAPI } from '../../api';
 import { Calendar, CheckCircle, XCircle, Clock, Save, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -15,11 +15,12 @@ export default function TeacherAttendance() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // S-05 FIX: Load teacher's OWN courses only via /teachers/me (not all courses)
     teachersAPI.getMe().then(res => {
-      setTeacher(res.data.teacher);
-      return coursesAPI.getAll({ isActive: 'true' });
-    }).then(res => {
-      setCourses(res.data.courses);
+      const t = res.data.teacher;
+      setTeacher(t);
+      // Courses come from the teacher's assignedCourses — already filtered by ownership
+      setCourses(t.assignedCourses || []);
     }).catch(console.error)
     .finally(() => setLoading(false));
   }, []);
@@ -63,8 +64,10 @@ export default function TeacherAttendance() {
   ].filter((s, i, arr) => arr.findIndex(x => x._id === s._id) === i);
 
   const presentCount = Object.values(attendance).filter(s => s === 'present').length;
-  const absentCount = Object.values(attendance).filter(s => s === 'absent').length;
-  const lateCount = Object.values(attendance).filter(s => s === 'late').length;
+  const absentCount  = Object.values(attendance).filter(s => s === 'absent').length;
+  const lateCount    = Object.values(attendance).filter(s => s === 'late').length;
+
+  if (loading) return <div className="loading-overlay"><div className="loading-spinner"/><p>Loading...</p></div>;
 
   return (
     <div className="animate-fadeIn">
@@ -86,8 +89,14 @@ export default function TeacherAttendance() {
               <label className="form-label">Select Course</label>
               <select className="form-select" value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)}>
                 <option value="">— Choose a course —</option>
+                {/* S-05 FIX: Only teacher's own courses from assignedCourses */}
                 {courses.map(c => <option key={c._id} value={c._id}>{c.courseName} ({c.courseCode})</option>)}
               </select>
+              {courses.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  No courses assigned. Contact admin to assign courses.
+                </div>
+              )}
             </div>
             <div>
               <label className="form-label">Date</label>
@@ -112,8 +121,8 @@ export default function TeacherAttendance() {
         <div className="grid-3 mb-20">
           {[
             { label: 'Present', value: presentCount, color: 'var(--success)', icon: <CheckCircle size={18}/> },
-            { label: 'Absent', value: absentCount, color: 'var(--danger)', icon: <XCircle size={18}/> },
-            { label: 'Late', value: lateCount, color: 'var(--warning)', icon: <Clock size={18}/> }
+            { label: 'Absent',  value: absentCount,  color: 'var(--danger)',  icon: <XCircle size={18}/> },
+            { label: 'Late',    value: lateCount,     color: 'var(--warning)', icon: <Clock size={18}/> }
           ].map(s => (
             <div key={s.label} style={{ padding: '16px 20px', background: 'var(--bg-card)', border: '1px solid var(--bg-border)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ color: s.color }}>{s.icon}</div>

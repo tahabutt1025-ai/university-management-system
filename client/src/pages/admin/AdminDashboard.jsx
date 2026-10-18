@@ -43,7 +43,7 @@ export default function AdminDashboard() {
       bg: 'rgba(16,185,129,0.12)', change: '+3', path: '/admin/courses'
     },
     {
-      label: 'Fees Collected', value: `₹${((stats?.stats?.totalFeesPaid || 0) / 1000).toFixed(0)}K`,
+      label: 'Fees Collected', value: `PKR ${((stats?.stats?.totalFeesPaid || 0)).toLocaleString()}`,
       icon: <CreditCard size={20} />, color: '#f59e0b',
       bg: 'rgba(245,158,11,0.12)', change: '+8%', path: '/admin/fees'
     },
@@ -223,7 +223,7 @@ export default function AdminDashboard() {
                 { label: 'System Attendance Rate', value: `${overview.systemAttendanceRate}%`, color: parseFloat(overview.systemAttendanceRate) >= 80 ? 'var(--success)' : 'var(--warning)' },
                 { label: 'Average Grade', value: `${overview.avgGrade}%`, color: parseFloat(overview.avgGrade) >= 70 ? 'var(--success)' : 'var(--danger)' },
                 { label: 'Total Grade Records', value: overview.totalGradesRecorded, color: 'var(--primary-400)' },
-                { label: 'Pending Fees', value: `₹${((stats?.stats?.totalFeesPending || 0) / 1000).toFixed(0)}K`, color: 'var(--warning)' }
+                { label: 'Pending Fees', value: `PKR ${((stats?.stats?.totalFeesPending || 0)).toLocaleString()}`, color: 'var(--warning)' }
               ].map((item, i) => (
                 <div key={i} style={{ textAlign: 'center', padding: '16px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)' }}>
                   <div style={{ fontSize: 24, fontWeight: 800, color: item.color }}>{item.value}</div>

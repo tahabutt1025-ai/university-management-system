@@ -17,6 +17,7 @@ import AdminUsers from './pages/admin/AdminUsers';
 import AdminCourses from './pages/admin/AdminCourses';
 import AdminFees from './pages/admin/AdminFees';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
+import AdminEnrollment from './pages/admin/AdminEnrollment';
 import AlertSettings from './pages/admin/AlertSettings';
 import AlertHistory from './pages/admin/AlertHistory';
 import NotificationPreferences from './pages/student/NotificationPreferences';
@@ -90,10 +91,11 @@ function AppRoutes() {
       <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
 
         {/* Admin */}
-        <Route path="admin/dashboard"  element={<PrivateRoute allowedRoles={['admin']}><AdminDashboard /></PrivateRoute>} />
-        <Route path="admin/users"      element={<PrivateRoute allowedRoles={['admin']}><AdminUsers /></PrivateRoute>} />
-        <Route path="admin/courses"    element={<PrivateRoute allowedRoles={['admin']}><AdminCourses /></PrivateRoute>} />
-        <Route path="admin/fees"       element={<PrivateRoute allowedRoles={['admin']}><AdminFees /></PrivateRoute>} />
+        <Route path="admin/dashboard"       element={<PrivateRoute allowedRoles={['admin']}><AdminDashboard /></PrivateRoute>} />
+        <Route path="admin/users"           element={<PrivateRoute allowedRoles={['admin']}><AdminUsers /></PrivateRoute>} />
+        <Route path="admin/courses"         element={<PrivateRoute allowedRoles={['admin']}><AdminCourses /></PrivateRoute>} />
+        <Route path="admin/enrollment"      element={<PrivateRoute allowedRoles={['admin']}><AdminEnrollment /></PrivateRoute>} />
+        <Route path="admin/fees"            element={<PrivateRoute allowedRoles={['admin']}><AdminFees /></PrivateRoute>} />
         <Route path="admin/analytics"       element={<PrivateRoute allowedRoles={['admin']}><AdminAnalytics /></PrivateRoute>} />
         <Route path="admin/alerts/settings" element={<PrivateRoute allowedRoles={['admin']}><AlertSettings /></PrivateRoute>} />
         <Route path="admin/alerts/history"  element={<PrivateRoute allowedRoles={['admin']}><AlertHistory /></PrivateRoute>} />

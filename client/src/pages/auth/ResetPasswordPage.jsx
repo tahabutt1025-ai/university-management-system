@@ -16,8 +16,12 @@ export default function ResetPasswordPage() {
 
   const validate = () => {
     const errs = {};
-    if (!form.password || form.password.length < 6)
-      errs.password = 'Password must be at least 6 characters';
+    if (!form.password || form.password.length < 8)
+      errs.password = 'Password must be at least 8 characters';
+    else if (!/[a-zA-Z]/.test(form.password))
+      errs.password = 'Password must contain at least one letter';
+    else if (!/[0-9]/.test(form.password))
+      errs.password = 'Password must contain at least one number';
     if (form.password !== form.confirm)
       errs.confirm = 'Passwords do not match';
     setErrors(errs);
@@ -80,7 +84,7 @@ export default function ResetPasswordPage() {
               Set new password
             </h2>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              Choose a strong password — at least 6 characters.
+              Choose a strong password — at least 8 characters with a letter and number.
             </p>
 
             <form onSubmit={handleSubmit} noValidate>
@@ -94,7 +98,7 @@ export default function ResetPasswordPage() {
                     id="reset-password"
                     type={showPass ? 'text' : 'password'}
                     className="form-input"
-                    placeholder="Min 6 characters"
+                    placeholder="Min 8 characters, include a letter and number"
                     value={form.password}
                     onChange={(e) => {
                       setForm((f) => ({ ...f, password: e.target.value }));

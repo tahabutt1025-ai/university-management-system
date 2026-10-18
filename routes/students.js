@@ -36,23 +36,26 @@ async function enforceOwnership(req, res, requestedStudentId) {
 // @access  Admin, Teacher
 router.get('/', protect, authorize('admin', 'teacher'), async (req, res) => {
   try {
-    const { page = 1, limit = 20, department, semester, search } = req.query;
+    const { page = 1, department, semester, search } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100); // H-08 FIX: cap at 100
     let query = {};
 
     if (department) query.department = department;
     if (semester) query.semester = parseInt(semester);
 
     if (search) {
+      // H-08 FIX: escape special regex characters to prevent ReDoS
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const users = await User.find({
         $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } }
+          { name: { $regex: escaped, $options: 'i' } },
+          { email: { $regex: escaped, $options: 'i' } }
         ]
       }).select('_id');
       const userIds = users.map(u => u._id);
       query.$or = [
         { user: { $in: userIds } },
-        { rollNumber: { $regex: search, $options: 'i' } }
+        { rollNumber: { $regex: escaped, $options: 'i' } }
       ];
     }
 
@@ -61,7 +64,7 @@ router.get('/', protect, authorize('admin', 'teacher'), async (req, res) => {
       .populate('user', 'name email phone avatar isActive')
       .populate('enrolledCourses', 'courseName courseCode')
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(limit);
 
     res.json({
       success: true,
@@ -72,7 +75,8 @@ router.get('/', protect, authorize('admin', 'teacher'), async (req, res) => {
       students: result
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[students/GET]', err);
+    res.status(500).json({ success: false, message: 'Failed to load students.' });
   }
 });
 
@@ -130,22 +134,39 @@ router.put('/:id', protect, async (req, res) => {
     // Ownership check
     if (!(await enforceOwnership(req, res, student._id))) return;
 
-    // Students cannot change their own roll number, department, or semester
+    let allowedUpdate;
     if (req.user.role === 'student') {
-      delete req.body.rollNumber;
-      delete req.body.department;
-      delete req.body.semester;
-      delete req.body.section;
-      delete req.body.enrolledCourses;
+      // S-03 FIX: Students can only update safe personal info — never CGPA, roll no, department, user link
+      const { guardianName, guardianPhone, address, dateOfBirth, bloodGroup } = req.body;
+      allowedUpdate = {};
+      if (guardianName  !== undefined) allowedUpdate.guardianName  = String(guardianName).trim().slice(0, 100);
+      if (guardianPhone !== undefined) allowedUpdate.guardianPhone = String(guardianPhone).trim().slice(0, 20);
+      if (address       !== undefined) allowedUpdate.address       = String(address).trim().slice(0, 300);
+      if (dateOfBirth   !== undefined) allowedUpdate.dateOfBirth   = dateOfBirth;
+      if (bloodGroup    !== undefined) allowedUpdate.bloodGroup    = String(bloodGroup).trim().slice(0, 5);
+    } else {
+      // Admin: broader but explicit allow-list — cgpa is still server-computed
+      const { rollNumber, department, semester, section, guardianName, guardianPhone, address, dateOfBirth, bloodGroup } = req.body;
+      allowedUpdate = {};
+      if (rollNumber    !== undefined) allowedUpdate.rollNumber    = String(rollNumber).trim().slice(0, 50);
+      if (department    !== undefined) allowedUpdate.department    = String(department).trim().slice(0, 100);
+      if (semester      !== undefined) allowedUpdate.semester      = parseInt(semester) || 1;
+      if (section       !== undefined) allowedUpdate.section       = String(section).trim().slice(0, 5);
+      if (guardianName  !== undefined) allowedUpdate.guardianName  = String(guardianName).trim().slice(0, 100);
+      if (guardianPhone !== undefined) allowedUpdate.guardianPhone = String(guardianPhone).trim().slice(0, 20);
+      if (address       !== undefined) allowedUpdate.address       = String(address).trim().slice(0, 300);
+      if (dateOfBirth   !== undefined) allowedUpdate.dateOfBirth   = dateOfBirth;
+      if (bloodGroup    !== undefined) allowedUpdate.bloodGroup    = String(bloodGroup).trim().slice(0, 5);
     }
 
-    const updated = await Student.findByIdAndUpdate(req.params.id, req.body, {
+    const updated = await Student.findByIdAndUpdate(req.params.id, allowedUpdate, {
       new: true, runValidators: true
     }).populate('user', 'name email');
 
     res.json({ success: true, student: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[students/PUT]', err);
+    res.status(500).json({ success: false, message: 'Failed to update student record.' });
   }
 });
 
@@ -185,7 +206,8 @@ router.get('/:id/attendance-summary', protect, async (req, res) => {
 
     res.json({ success: true, summary: result });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[students/attendance-summary]', err);
+    res.status(500).json({ success: false, message: 'Failed to load attendance summary.' });
   }
 });
 
@@ -236,7 +258,8 @@ router.get('/:id/grades-summary', protect, async (req, res) => {
 
     res.json({ success: true, summary: result });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[students/grades-summary]', err);
+    res.status(500).json({ success: false, message: 'Failed to load grades summary.' });
   }
 });
 

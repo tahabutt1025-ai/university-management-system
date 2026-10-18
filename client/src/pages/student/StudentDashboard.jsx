@@ -54,7 +54,7 @@ export default function StudentDashboard() {
           { label: 'Enrolled Courses', value: student?.enrolledCourses?.length || 0, icon: <BookOpen size={20}/>, color: '#6366f1', bg: 'rgba(99,102,241,0.12)', path: '/student/attendance' },
           { label: 'Overall Attendance', value: `${overallAttendance}%`, icon: <Calendar size={20}/>, color: parseFloat(overallAttendance) >= 75 ? '#10b981' : '#ef4444', bg: parseFloat(overallAttendance) >= 75 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', path: '/student/attendance' },
           { label: 'Overall Grade Avg', value: `${overallGrade}%`, icon: <Star size={20}/>, color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', path: '/student/grades' },
-          { label: 'Pending Fees', value: `₹${((fees?.totalPending || 0) / 1000).toFixed(0)}K`, icon: <CreditCard size={20}/>, color: fees?.totalPending > 0 ? '#ef4444' : '#10b981', bg: fees?.totalPending > 0 ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)', path: '/student/fees' }
+          { label: 'Pending Fees', value: `PKR ${((fees?.totalPending || 0)).toLocaleString()}`, icon: <CreditCard size={20}/>, color: fees?.totalPending > 0 ? '#ef4444' : '#10b981', bg: fees?.totalPending > 0 ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)', path: '/student/fees' }
         ].map(card => (
           <div key={card.label} className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate(card.path)}>
             <div className="stat-icon" style={{ background: card.bg, color: card.color }}>{card.icon}</div>

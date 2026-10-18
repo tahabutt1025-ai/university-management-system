@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { assignmentsAPI, coursesAPI } from '../../api';
-import { ClipboardList, Plus, Trash2, Users, Loader, Calendar } from 'lucide-react';
+import { assignmentsAPI, teachersAPI } from '../../api';
+import { ClipboardList, Plus, Trash2, Loader, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
@@ -15,12 +15,13 @@ export default function TeacherAssignments() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [assignRes, coursesRes] = await Promise.all([
+      // S-05 FIX: Load teacher's OWN courses only; assignments are already scoped server-side
+      const [assignRes, teacherRes] = await Promise.all([
         assignmentsAPI.getAll({ limit: 30 }),
-        coursesAPI.getAll({ isActive: 'true' })
+        teachersAPI.getMe()
       ]);
       setAssignments(assignRes.data.assignments);
-      setCourses(coursesRes.data.courses);
+      setCourses(teacherRes.data.teacher?.assignedCourses || []);
     } catch { toast.error('Failed to load'); }
     finally { setLoading(false); }
   };

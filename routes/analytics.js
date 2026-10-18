@@ -290,7 +290,7 @@ Be empathetic but factual. Response in plain text (no bullet points).`;
 
 // @route   GET /api/analytics/student/:studentId
 // @desc    Full analytics for a specific student
-// @access  Admin, Teacher, Student (own)
+// @access  Admin, Teacher, Student (own only)
 router.get('/student/:studentId', protect, async (req, res) => {
   try {
     const student = await Student.findById(req.params.studentId)
@@ -298,6 +298,14 @@ router.get('/student/:studentId', protect, async (req, res) => {
       .populate('enrolledCourses', 'courseName courseCode');
 
     if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
+
+    // S-04 FIX: Ownership check — students can only view their own analytics
+    if (req.user.role === 'student') {
+      const myStudent = await Student.findOne({ user: req.user._id }).select('_id');
+      if (!myStudent || myStudent._id.toString() !== student._id.toString()) {
+        return res.status(403).json({ success: false, message: 'Access denied: you can only view your own analytics.' });
+      }
+    }
 
     const [attendanceAnalysis, gradeAnalysis] = await Promise.all([
       analyzeAttendancePatterns(student._id),
@@ -313,9 +321,8 @@ router.get('/student/:studentId', protect, async (req, res) => {
     const riskLevel = criticalAlerts.length >= 2 ? 'high' :
                       criticalAlerts.length === 1 ? 'medium' : 'low';
 
-    // Get AI insights (if OpenAI key available)
+    // S-04 FIX: Send only anonymized/minimal data to OpenAI — no name, email, or roll number
     const aiInsight = await getOpenAIInsights({
-      name: student.user?.name,
       department: student.department,
       semester: student.semester,
       attendance: attendanceAnalysis,
@@ -341,7 +348,8 @@ router.get('/student/:studentId', protect, async (req, res) => {
 
     res.json({ success: true, analytics: result });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[analytics/student]', err);
+    res.status(500).json({ success: false, message: 'Failed to load analytics.' });
   }
 });
 
@@ -350,10 +358,12 @@ router.get('/student/:studentId', protect, async (req, res) => {
 // @access  Admin, Teacher
 router.get('/at-risk', protect, authorize('admin', 'teacher'), async (req, res) => {
   try {
-    const { threshold = 75, limit = 50 } = req.query;
+    const { threshold = 75 } = req.query;
+    // H-08 FIX: Cap limit at 100 regardless of query param
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     const students = await Student.find()
       .populate('user', 'name email')
-      .limit(parseInt(limit));
+      .limit(limit);
 
     const atRiskStudents = [];
 
@@ -405,7 +415,8 @@ router.get('/at-risk', protect, authorize('admin', 'teacher'), async (req, res) 
       atRiskStudents
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[analytics/at-risk]', err);
+    res.status(500).json({ success: false, message: 'Failed to load at-risk analytics.' });
   }
 });
 
@@ -475,7 +486,8 @@ router.get('/system-overview', protect, authorize('admin'), async (req, res) => 
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[analytics/system-overview]', err);
+    res.status(500).json({ success: false, message: 'Failed to load system overview.' });
   }
 });
 
@@ -525,7 +537,8 @@ router.post('/send-alerts', protect, authorize('admin'), async (req, res) => {
       alertsSent
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[analytics/send-alerts]', err);
+    res.status(500).json({ success: false, message: 'Failed to send alerts.' });
   }
 });
 

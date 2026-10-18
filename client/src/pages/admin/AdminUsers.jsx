@@ -49,12 +49,12 @@ export default function AdminUsers() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Delete user "${name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Deactivate user "${name}"?\n\nThis will prevent them from logging in, but all their academic records (grades, attendance, assignments) will be preserved.`)) return;
     try {
       await adminAPI.deleteUser(id);
-      toast.success('User deleted');
+      toast.success('User deactivated. All academic records are preserved.');
       fetchUsers();
-    } catch (err) { toast.error('Failed to delete user'); }
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to deactivate user'); }
   };
 
   const handleToggleActive = async (user) => {

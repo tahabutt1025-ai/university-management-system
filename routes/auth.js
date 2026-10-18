@@ -8,32 +8,8 @@ const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');
 const { protect } = require('../middleware/auth');
 
-// ── Optional email helper (only active when EMAIL_HOST is set) ──────────────
-let transporter = null;
-if (process.env.EMAIL_HOST) {
-  try {
-    const nodemailer = require('nodemailer');
-    transporter = nodemailer.createTransport({
-      host:   process.env.EMAIL_HOST,
-      port:   parseInt(process.env.EMAIL_PORT || '587'),
-      secure: false,
-      auth:   { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-    });
-  } catch (e) {
-    console.warn('[EMAIL] nodemailer not installed:', e.message);
-  }
-}
-
-async function sendMail({ to, subject, text }) {
-  if (!transporter) {
-    console.warn('[EMAIL] No transporter configured — would send to:', to, '|', subject);
-    return;
-  }
-  await transporter.sendMail({
-    from: process.env.EMAIL_FROM || 'noreply@university.edu',
-    to, subject, text
-  });
-}
+// ── Shared email service (single source of truth) ──────────────────────────
+const emailService = require('../utils/emailService');
 
 // ── Helper: Generate JWT ──────────────────────────────────────────────────────
 const generateToken = (id) => {
@@ -58,14 +34,20 @@ const sendTokenResponse = (user, statusCode, res) => {
   });
 };
 
+// ── Password strength validator ───────────────────────────────────────────────
+const passwordPolicy = body('password')
+  .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+  .matches(/[a-zA-Z]/).withMessage('Password must contain at least one letter')
+  .matches(/[0-9]/).withMessage('Password must contain at least one number');
+
 // @route   POST /api/auth/register
-// @desc    Register a new user
+// @desc    Register a new student account (public — student role only)
 // @access  Public
 router.post('/register', [
   body('name').trim().notEmpty().withMessage('Name is required'),
-  body('email').isEmail().withMessage('Please provide a valid email'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('role').isIn(['student', 'teacher', 'admin']).withMessage('Invalid role')
+  body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
+  passwordPolicy,
+  // Role is ignored — public registration always creates a student
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -73,7 +55,9 @@ router.post('/register', [
   }
 
   try {
-    const { name, email, password, role, ...profileData } = req.body;
+    const { name, email, password, ...profileData } = req.body;
+    // S-01 FIX: Public registration creates students only, never admin/teacher
+    const role = 'student';
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -82,30 +66,19 @@ router.post('/register', [
 
     const user = await User.create({ name, email, password, role });
 
-    // Create role-specific profile
-    if (role === 'student') {
-      const rollNumber = profileData.rollNumber || `STU-${Date.now()}`;
-      await Student.create({
-        user: user._id,
-        rollNumber,
-        department: profileData.department || 'Computer Science',
-        semester:   profileData.semester   || 1,
-        section:    profileData.section    || 'A'
-      });
-    } else if (role === 'teacher') {
-      const employeeId = profileData.employeeId || `EMP-${Date.now()}`;
-      await Teacher.create({
-        user: user._id,
-        employeeId,
-        department:  profileData.department  || 'Computer Science',
-        designation: profileData.designation || 'Lecturer'
-      });
-    }
+    const rollNumber = profileData.rollNumber || `STU-${Date.now()}`;
+    await Student.create({
+      user: user._id,
+      rollNumber,
+      department: profileData.department || 'Computer Science',
+      semester:   profileData.semester   || 1,
+      section:    profileData.section    || 'A'
+    });
 
     sendTokenResponse(user, 201, res);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[auth/register]', err);
+    res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
   }
 });
 
@@ -113,7 +86,7 @@ router.post('/register', [
 // @desc    Login user
 // @access  Public
 router.post('/login', [
-  body('email').isEmail().withMessage('Valid email required'),
+  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
   body('password').notEmpty().withMessage('Password required')
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -124,13 +97,29 @@ router.post('/login', [
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select('+password +failedLoginCount +lockUntil');
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
+    // Account lockout check
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+      const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+      return res.status(401).json({
+        success: false,
+        message: `Account locked. Try again in ${minutesLeft} minute(s).`
+      });
+    }
+
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      // Increment failed login count
+      user.failedLoginCount = (user.failedLoginCount || 0) + 1;
+      if (user.failedLoginCount >= 5) {
+        user.lockUntil = Date.now() + 15 * 60 * 1000; // Lock for 15 minutes
+        user.failedLoginCount = 0;
+      }
+      await user.save({ validateBeforeSave: false });
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
@@ -138,13 +127,16 @@ router.post('/login', [
       return res.status(401).json({ success: false, message: 'Account deactivated. Contact admin.' });
     }
 
+    // Reset failed login count on success
+    user.failedLoginCount = 0;
+    user.lockUntil = undefined;
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
 
     sendTokenResponse(user, 200, res);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[auth/login]', err);
+    res.status(500).json({ success: false, message: 'Login failed. Please try again.' });
   }
 });
 
@@ -166,23 +158,31 @@ router.get('/me', protect, async (req, res) => {
 
     res.json({ success: true, user, profile });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[auth/me]', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch profile.' });
   }
 });
 
 // @route   PUT /api/auth/updatepassword
 // @desc    Update password (authenticated)
 // @access  Private
-router.put('/updatepassword', protect, async (req, res) => {
+router.put('/updatepassword', protect, [
+  body('newPassword')
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+    .matches(/[a-zA-Z]/).withMessage('Password must contain at least one letter')
+    .matches(/[0-9]/).withMessage('Password must contain at least one number')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
   try {
     const user = await User.findById(req.user._id).select('+password');
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ success: false, message: 'Both currentPassword and newPassword are required.' });
-    }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters.' });
     }
 
     const isMatch = await user.comparePassword(currentPassword);
@@ -195,32 +195,40 @@ router.put('/updatepassword', protect, async (req, res) => {
 
     sendTokenResponse(user, 200, res);
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[auth/updatepassword]', err);
+    res.status(500).json({ success: false, message: 'Failed to update password.' });
   }
 });
 
 // @route   PUT /api/auth/updateprofile
-// @desc    Update user profile
+// @desc    Update user profile (allow-listed fields only)
 // @access  Private
 router.put('/updateprofile', protect, async (req, res) => {
   try {
+    // S-06 FIX: Allow-list updatable fields — never pass raw req.body
     const { name, phone, avatar } = req.body;
+    const allowedUpdates = {};
+    if (name !== undefined) allowedUpdates.name = String(name).trim().slice(0, 100);
+    if (phone !== undefined) allowedUpdates.phone = String(phone).trim().slice(0, 20);
+    if (avatar !== undefined) allowedUpdates.avatar = String(avatar).trim().slice(0, 500);
+
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { name, phone, avatar },
+      allowedUpdates,
       { new: true, runValidators: true }
     );
     res.json({ success: true, user });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[auth/updateprofile]', err);
+    res.status(500).json({ success: false, message: 'Failed to update profile.' });
   }
 });
 
 // @route   POST /api/auth/forgot-password
-// @desc    Request a password reset link (does NOT reveal whether email exists)
+// @desc    Request a password reset link
 // @access  Public
 router.post('/forgot-password', [
-  body('email').isEmail().withMessage('Valid email required')
+  body('email').isEmail().normalizeEmail().withMessage('Valid email required')
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -231,7 +239,7 @@ router.post('/forgot-password', [
   const genericResponse = { success: true, message: 'If that email is registered, a reset link has been sent.' };
 
   try {
-    const user = await User.findOne({ email: req.body.email.toLowerCase() });
+    const user = await User.findOne({ email: req.body.email });
     if (!user || !user.isActive) {
       return res.json(genericResponse); // don't reveal non-existence
     }
@@ -242,18 +250,18 @@ router.post('/forgot-password', [
     user.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
     await user.save({ validateBeforeSave: false });
 
-    const resetURL = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${rawToken}`;
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetURL = `${frontendUrl}/reset-password/${rawToken}`;
 
     try {
-      await sendMail({
+      await emailService.sendMail({
         to:      user.email,
         subject: 'UniManage — Password Reset Request',
-        text:    `You requested a password reset.\n\nClick the link below to set a new password (valid for 1 hour):\n\n${resetURL}\n\nIf you did not request this, ignore this email — your password will not change.`
+        text:    `You requested a password reset.\n\nClick the link below to set a new password (valid for 1 hour):\n\n${resetURL}\n\nIf you did not request this, ignore this email — your password will not change.`,
+        html:    `<p>You requested a password reset.</p><p><a href="${resetURL}">Reset your password</a> (valid for 1 hour)</p><p>If you did not request this, ignore this email.</p>`
       });
     } catch (mailErr) {
-      // Don't fail the request if mail sending fails — just log
       console.error('[EMAIL] Failed to send reset email:', mailErr.message);
-      // Clear the token so it can't be exploited without the email being delivered
       user.passwordResetToken   = undefined;
       user.passwordResetExpires = undefined;
       await user.save({ validateBeforeSave: false });
@@ -262,15 +270,16 @@ router.post('/forgot-password', [
 
     res.json(genericResponse);
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[auth/forgot-password]', err);
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 });
 
 // @route   POST /api/auth/reset-password/:token
-// @desc    Reset password using a one-time token from the reset email
+// @desc    Reset password using a one-time token
 // @access  Public
 router.post('/reset-password/:token', [
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
+  passwordPolicy
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -278,7 +287,6 @@ router.post('/reset-password/:token', [
   }
 
   try {
-    // Hash the incoming raw token and look it up
     const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
 
     const user = await User.findOne({
@@ -290,15 +298,17 @@ router.post('/reset-password/:token', [
       return res.status(400).json({ success: false, message: 'Reset link is invalid or has expired.' });
     }
 
-    // Set new password and clear reset fields
     user.password             = req.body.password;
     user.passwordResetToken   = undefined;
     user.passwordResetExpires = undefined;
+    user.failedLoginCount     = 0;
+    user.lockUntil            = undefined;
     await user.save();
 
     sendTokenResponse(user, 200, res);
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[auth/reset-password]', err);
+    res.status(500).json({ success: false, message: 'Failed to reset password.' });
   }
 });
 

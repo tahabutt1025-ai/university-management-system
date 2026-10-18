@@ -1,27 +1,22 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff, Loader } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, Loader, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
-
-const DEMO_CREDENTIALS = [
-  { role: 'Admin',   email: 'admin@university.edu',  password: 'Admin@123',   color: '#a78bfa' },
-  { role: 'Teacher', email: 'ali@university.edu',    password: 'Teacher@123', color: '#34d399' },
-  { role: 'Student', email: 'ahmed1@student.edu',    password: 'Student@123', color: '#60a5fa' }
-];
+import API from '../../api';
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate   = useNavigate();
 
-  const [selectedRole, setSelectedRole] = useState(0);
-  const [form,         setForm]         = useState({ email: '', password: '' });
-  const [showPass,     setShowPass]     = useState(false);
-  const [loading,      setLoading]      = useState(false);
-  const [forgotMode,   setForgotMode]   = useState(false);
-  const [forgotEmail,  setForgotEmail]  = useState('');
-  const [forgotSent,   setForgotSent]   = useState(false);
-  const [errors,       setErrors]       = useState({});
+  const [form,       setForm]       = useState({ email: '', password: '' });
+  const [showPass,   setShowPass]   = useState(false);
+  const [loading,    setLoading]    = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent,  setForgotSent]  = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [errors,     setErrors]     = useState({});
 
   // ── Validation ────────────────────────────────────────────
   const validate = () => {
@@ -31,12 +26,6 @@ export default function LoginPage() {
     if (!form.password)                       errs.password = 'Password is required';
     setErrors(errs);
     return Object.keys(errs).length === 0;
-  };
-
-  // ── Handlers ──────────────────────────────────────────────
-  const handleQuickLogin = (cred) => {
-    setForm({ email: cred.email, password: cred.password });
-    setErrors({});
   };
 
   const handleSubmit = async (e) => {
@@ -50,24 +39,32 @@ export default function LoginPage() {
     } catch (err) {
       const msg = err.response?.data?.message || 'Login failed. Check your credentials.';
       toast.error(msg);
-      // Surface wrong-password error inline
       if (err.response?.status === 401) {
-        setErrors({ password: 'Incorrect email or password.' });
+        setErrors({ password: msg });
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // H-10 FIX: Actually call POST /auth/forgot-password — no longer a placeholder
   const handleForgotSubmit = async (e) => {
     e.preventDefault();
     if (!forgotEmail || !/\S+@\S+\.\S+/.test(forgotEmail)) {
       toast.error('Enter a valid email address');
       return;
     }
-    // In production this would call an API endpoint — placeholder for now
-    setForgotSent(true);
-    toast.success('If that email is registered, a reset link has been sent.');
+    setForgotLoading(true);
+    try {
+      await API.post('/auth/forgot-password', { email: forgotEmail });
+      setForgotSent(true);
+      toast.success('If that email is registered, a reset link has been sent.');
+    } catch (err) {
+      // Show generic message to prevent account enumeration
+      toast.error(err.response?.data?.message || 'Failed to send reset email. Try again later.');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   // ── Forgot-password screen ────────────────────────────────
@@ -102,7 +99,7 @@ export default function LoginPage() {
                 style={{ width: '100%' }}
                 onClick={() => { setForgotMode(false); setForgotSent(false); setForgotEmail(''); }}
               >
-                ← Back to Sign In
+                <ArrowLeft size={14} style={{ marginRight: 4 }} /> Back to Sign In
               </button>
             </>
           ) : (
@@ -134,8 +131,10 @@ export default function LoginPage() {
                   type="submit"
                   className="btn btn-primary btn-lg"
                   style={{ width: '100%', marginBottom: 12 }}
+                  disabled={forgotLoading}
                 >
-                  Send Reset Link
+                  {forgotLoading ? <Loader size={14} style={{ animation: 'spin 0.8s linear infinite', marginRight: 6 }} /> : null}
+                  {forgotLoading ? 'Sending...' : 'Send Reset Link'}
                 </button>
               </form>
 
@@ -144,7 +143,7 @@ export default function LoginPage() {
                 style={{ width: '100%' }}
                 onClick={() => setForgotMode(false)}
               >
-                ← Back to Sign In
+                <ArrowLeft size={14} style={{ marginRight: 4 }} /> Back to Sign In
               </button>
             </>
           )}
@@ -183,37 +182,6 @@ export default function LoginPage() {
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
           Access your role-based dashboard securely.
         </p>
-
-        {/* Role Selector */}
-        <div className="auth-tabs" role="tablist" aria-label="Select demo role">
-          {DEMO_CREDENTIALS.map((cred, i) => (
-            <button
-              key={cred.role}
-              role="tab"
-              aria-selected={selectedRole === i}
-              className={`auth-tab ${selectedRole === i ? 'active' : ''}`}
-              onClick={() => { setSelectedRole(i); handleQuickLogin(cred); }}
-              style={selectedRole === i ? { color: cred.color } : {}}
-            >
-              {cred.role}
-            </button>
-          ))}
-        </div>
-
-        {/* Quick credential hint */}
-        <div style={{
-          background: 'rgba(99,102,241,0.08)',
-          border: '1px solid rgba(99,102,241,0.2)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '10px 14px',
-          marginBottom: 20,
-          fontSize: 12,
-          color: 'var(--text-secondary)'
-        }}>
-          <span style={{ color: DEMO_CREDENTIALS[selectedRole].color, fontWeight: 600 }}>
-            Demo {DEMO_CREDENTIALS[selectedRole].role}
-          </span>: {DEMO_CREDENTIALS[selectedRole].email}
-        </div>
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} noValidate>

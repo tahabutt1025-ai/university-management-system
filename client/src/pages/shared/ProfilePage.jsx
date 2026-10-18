@@ -25,7 +25,9 @@ export default function ProfilePage() {
   const handleChangePassword = async () => {
     if (!pwForm.currentPassword || !pwForm.newPassword) { toast.error('Fill all password fields'); return; }
     if (pwForm.newPassword !== pwForm.confirmPassword) { toast.error('Passwords do not match'); return; }
-    if (pwForm.newPassword.length < 6) { toast.error('New password must be at least 6 characters'); return; }
+    if (pwForm.newPassword.length < 8) { toast.error('New password must be at least 8 characters'); return; }
+    if (!/[a-zA-Z]/.test(pwForm.newPassword)) { toast.error('New password must contain at least one letter'); return; }
+    if (!/[0-9]/.test(pwForm.newPassword)) { toast.error('New password must contain at least one number'); return; }
     setSavingPw(true);
     try {
       await authAPI.updatePassword({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });

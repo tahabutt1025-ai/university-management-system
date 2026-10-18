@@ -12,7 +12,8 @@ const Grade = require('../models/Grade');
 // @access  Admin
 router.get('/', protect, authorize('admin'), async (req, res) => {
   try {
-    const { page = 1, limit = 20, department } = req.query;
+    const { page = 1, department } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     let query = {};
     if (department) query.department = department;
 
@@ -21,11 +22,12 @@ router.get('/', protect, authorize('admin'), async (req, res) => {
       .populate('user', 'name email phone avatar isActive')
       .populate('assignedCourses', 'courseName courseCode')
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(limit);
 
     res.json({ success: true, count: teachers.length, total, teachers });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[teachers/GET]', err);
+    res.status(500).json({ success: false, message: 'Failed to load teachers.' });
   }
 });
 
@@ -43,7 +45,8 @@ router.get('/me', protect, authorize('teacher'), async (req, res) => {
     }
     res.json({ success: true, teacher });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[teachers/me]', err);
+    res.status(500).json({ success: false, message: 'Failed to load teacher profile.' });
   }
 });
 
@@ -61,30 +64,59 @@ router.get('/:id', protect, authorize('admin', 'teacher'), async (req, res) => {
     }
     res.json({ success: true, teacher });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[teachers/GET/:id]', err);
+    res.status(500).json({ success: false, message: 'Failed to load teacher.' });
   }
 });
 
 // @route   PUT /api/teachers/:id
 // @desc    Update teacher profile
-// @access  Admin, Teacher (own)
+// @access  Admin (any teacher), Teacher (own profile only, limited fields)
 router.put('/:id', protect, authorize('admin', 'teacher'), async (req, res) => {
   try {
-    const teacher = await Teacher.findByIdAndUpdate(req.params.id, req.body, {
-      new: true, runValidators: true
-    });
+    const teacher = await Teacher.findById(req.params.id);
     if (!teacher) {
       return res.status(404).json({ success: false, message: 'Teacher not found' });
     }
-    res.json({ success: true, teacher });
+
+    // S-05 FIX: Teachers can only update their own profile
+    if (req.user.role === 'teacher') {
+      const myTeacher = await Teacher.findOne({ user: req.user._id }).select('_id');
+      if (!myTeacher || myTeacher._id.toString() !== teacher._id.toString()) {
+        return res.status(403).json({ success: false, message: 'Access denied: you can only update your own profile.' });
+      }
+    }
+
+    // S-06 FIX: Allow-list fields — admins can change department/designation; teachers can change office hours/bio
+    let allowedUpdate = {};
+    if (req.user.role === 'admin') {
+      const { department, designation, qualification, specialization, officeHours, bio } = req.body;
+      if (department     !== undefined) allowedUpdate.department     = String(department).trim().slice(0, 100);
+      if (designation    !== undefined) allowedUpdate.designation    = String(designation).trim().slice(0, 100);
+      if (qualification  !== undefined) allowedUpdate.qualification  = String(qualification).trim().slice(0, 200);
+      if (specialization !== undefined) allowedUpdate.specialization = String(specialization).trim().slice(0, 200);
+      if (officeHours    !== undefined) allowedUpdate.officeHours    = String(officeHours).trim().slice(0, 100);
+      if (bio            !== undefined) allowedUpdate.bio            = String(bio).trim().slice(0, 1000);
+    } else {
+      // Teacher can only update their office hours and bio
+      const { officeHours, bio } = req.body;
+      if (officeHours !== undefined) allowedUpdate.officeHours = String(officeHours).trim().slice(0, 100);
+      if (bio         !== undefined) allowedUpdate.bio         = String(bio).trim().slice(0, 1000);
+    }
+
+    const updated = await Teacher.findByIdAndUpdate(req.params.id, allowedUpdate, {
+      new: true, runValidators: true
+    });
+    res.json({ success: true, teacher: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[teachers/PUT]', err);
+    res.status(500).json({ success: false, message: 'Failed to update teacher profile.' });
   }
 });
 
 // @route   GET /api/teachers/:id/class-overview
 // @desc    Get performance overview of teacher's class
-// @access  Teacher, Admin
+// @access  Teacher (own), Admin
 router.get('/:id/class-overview', protect, authorize('admin', 'teacher'), async (req, res) => {
   try {
     const teacher = await Teacher.findById(req.params.id);
@@ -92,15 +124,21 @@ router.get('/:id/class-overview', protect, authorize('admin', 'teacher'), async 
       return res.status(404).json({ success: false, message: 'Teacher not found' });
     }
 
+    // S-05 FIX: Teachers can only view their own class overview
+    if (req.user.role === 'teacher') {
+      const myTeacher = await Teacher.findOne({ user: req.user._id }).select('_id');
+      if (!myTeacher || myTeacher._id.toString() !== teacher._id.toString()) {
+        return res.status(403).json({ success: false, message: 'Access denied: you can only view your own class overview.' });
+      }
+    }
+
     const courses = await Course.find({ teacher: teacher._id })
       .populate('enrolledStudents', 'rollNumber department semester');
 
     const overview = await Promise.all(courses.map(async (course) => {
-      const studentIds = course.enrolledStudents.map(s => s._id);
-      
-      // Attendance stats
+      // B-01 FIX: Use consistent attendance calculation (present + late)
       const totalAttendance = await Attendance.countDocuments({ course: course._id });
-      const presentCount = await Attendance.countDocuments({ course: course._id, status: 'present' });
+      const presentCount = await Attendance.countDocuments({ course: course._id, status: { $in: ['present', 'late'] } });
       const avgAttendance = totalAttendance > 0 ? ((presentCount / totalAttendance) * 100).toFixed(1) : '0.0';
 
       // Grade stats
@@ -119,7 +157,8 @@ router.get('/:id/class-overview', protect, authorize('admin', 'teacher'), async 
 
     res.json({ success: true, overview });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[teachers/class-overview]', err);
+    res.status(500).json({ success: false, message: 'Failed to load class overview.' });
   }
 });
 

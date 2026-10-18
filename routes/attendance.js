@@ -6,27 +6,61 @@ const Teacher = require('../models/Teacher');
 const Student = require('../models/Student');
 const Course = require('../models/Course');
 
+// ── Helper: verify teacher teaches this course ────────────────────────────────
+async function requireCourseOwner(req, res, courseId) {
+  if (req.user.role === 'admin') return true; // admins bypass
+  const teacher = await Teacher.findOne({ user: req.user._id });
+  if (!teacher) {
+    res.status(403).json({ success: false, message: 'Teacher profile not found.' });
+    return false;
+  }
+  const course = await Course.findById(courseId).select('teacher');
+  if (!course) {
+    res.status(404).json({ success: false, message: 'Course not found.' });
+    return false;
+  }
+  if (course.teacher?.toString() !== teacher._id.toString()) {
+    res.status(403).json({ success: false, message: 'Access denied: you can only manage attendance for your own courses.' });
+    return false;
+  }
+  return true;
+}
+
 // @route   POST /api/attendance
 // @desc    Mark attendance for a class session
-// @access  Teacher
+// @access  Teacher (own courses only), Admin
 router.post('/', protect, authorize('teacher', 'admin'), async (req, res) => {
   try {
     const { courseId, date, records } = req.body;
-    // records: [{ studentId, status, remarks }]
 
-    const teacher = await Teacher.findOne({ user: req.user._id });
-    if (!teacher && req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Teacher profile not found' });
+    if (!courseId || !date || !Array.isArray(records)) {
+      return res.status(400).json({ success: false, message: 'courseId, date and records are required.' });
     }
+
+    // S-05 FIX: Teacher must teach this course
+    if (!(await requireCourseOwner(req, res, courseId))) return;
 
     const attendanceDate = new Date(date);
     attendanceDate.setHours(0, 0, 0, 0);
+
+    // B-02 FIX: Reject future dates
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (attendanceDate > today) {
+      return res.status(400).json({ success: false, message: 'Cannot mark attendance for a future date.' });
+    }
+
+    const teacher = await Teacher.findOne({ user: req.user._id });
 
     const results = [];
     const errors = [];
 
     for (const record of records) {
       try {
+        // Validate status
+        const validStatuses = ['present', 'absent', 'late', 'excused'];
+        const status = validStatuses.includes(record.status) ? record.status : 'present';
+
         const att = await Attendance.findOneAndUpdate(
           { student: record.studentId, course: courseId, date: attendanceDate },
           {
@@ -34,14 +68,14 @@ router.post('/', protect, authorize('teacher', 'admin'), async (req, res) => {
             course: courseId,
             markedBy: teacher?._id,
             date: attendanceDate,
-            status: record.status,
-            remarks: record.remarks
+            status,
+            remarks: record.remarks ? String(record.remarks).slice(0, 300) : undefined
           },
           { upsert: true, new: true, runValidators: true }
         );
         results.push(att);
       } catch (e) {
-        errors.push({ studentId: record.studentId, error: e.message });
+        errors.push({ studentId: record.studentId, error: 'Failed to record attendance' });
       }
     }
 
@@ -52,7 +86,8 @@ router.post('/', protect, authorize('teacher', 'admin'), async (req, res) => {
       errors
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[attendance/POST]', err);
+    res.status(500).json({ success: false, message: 'Failed to save attendance.' });
   }
 });
 
@@ -61,11 +96,11 @@ router.post('/', protect, authorize('teacher', 'admin'), async (req, res) => {
 // @access  All authenticated
 router.get('/', protect, async (req, res) => {
   try {
-    const { courseId, studentId, startDate, endDate, status, page = 1, limit = 50 } = req.query;
+    const { courseId, startDate, endDate, status, page = 1 } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     let query = {};
 
     if (courseId) query.course = courseId;
-    if (studentId) query.student = studentId;
     if (status) query.status = status;
     if (startDate || endDate) {
       query.date = {};
@@ -73,10 +108,14 @@ router.get('/', protect, async (req, res) => {
       if (endDate) query.date.$lte = new Date(endDate);
     }
 
-    // Students can only see their own attendance
+    // Students can only see their own attendance (H-02 FIX: always scoped)
     if (req.user.role === 'student') {
       const student = await Student.findOne({ user: req.user._id });
-      if (student) query.student = student._id;
+      if (!student) return res.json({ success: true, total: 0, records: [] });
+      query.student = student._id;
+    } else {
+      // For non-students, allow explicit studentId filter
+      if (req.query.studentId) query.student = req.query.studentId;
     }
 
     const total = await Attendance.countDocuments(query);
@@ -86,19 +125,23 @@ router.get('/', protect, async (req, res) => {
       .populate('course', 'courseName courseCode')
       .sort('-date')
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(limit);
 
     res.json({ success: true, total, records });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[attendance/GET]', err);
+    res.status(500).json({ success: false, message: 'Failed to load attendance.' });
   }
 });
 
 // @route   GET /api/attendance/course/:courseId/date/:date
 // @desc    Get attendance for a specific course on a specific date
-// @access  Teacher, Admin
+// @access  Teacher (own course), Admin
 router.get('/course/:courseId/date/:date', protect, authorize('teacher', 'admin'), async (req, res) => {
   try {
+    // S-05 FIX: Teacher must teach this course
+    if (!(await requireCourseOwner(req, res, req.params.courseId))) return;
+
     const date = new Date(req.params.date);
     date.setHours(0, 0, 0, 0);
     const endDate = new Date(date);
@@ -114,27 +157,43 @@ router.get('/course/:courseId/date/:date', protect, authorize('teacher', 'admin'
     const course = await Course.findById(req.params.courseId)
       .populate({ path: 'enrolledStudents', populate: { path: 'user', select: 'name avatar' } });
 
+    if (!course) return res.status(404).json({ success: false, message: 'Course not found' });
+
     const markedIds = new Set(records.map(r => r.student._id.toString()));
     const unmarked = course.enrolledStudents.filter(s => !markedIds.has(s._id.toString()));
 
     res.json({ success: true, records, unmarkedStudents: unmarked, course: { name: course.courseName, code: course.courseCode } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[attendance/course/date]', err);
+    res.status(500).json({ success: false, message: 'Failed to load attendance data.' });
   }
 });
 
 // @route   PUT /api/attendance/:id
 // @desc    Update attendance record
-// @access  Teacher, Admin
+// @access  Teacher (own course), Admin
 router.put('/:id', protect, authorize('teacher', 'admin'), async (req, res) => {
   try {
-    const record = await Attendance.findByIdAndUpdate(req.params.id, req.body, {
+    const record = await Attendance.findById(req.params.id);
+    if (!record) return res.status(404).json({ success: false, message: 'Record not found' });
+
+    // S-05 FIX: Teacher must teach this course
+    if (!(await requireCourseOwner(req, res, record.course.toString()))) return;
+
+    // S-06 FIX: Allow-list updatable fields
+    const { status, remarks } = req.body;
+    const allowedUpdate = {};
+    const validStatuses = ['present', 'absent', 'late', 'excused'];
+    if (status !== undefined && validStatuses.includes(status)) allowedUpdate.status = status;
+    if (remarks !== undefined) allowedUpdate.remarks = String(remarks).slice(0, 300);
+
+    const updated = await Attendance.findByIdAndUpdate(req.params.id, allowedUpdate, {
       new: true, runValidators: true
     });
-    if (!record) return res.status(404).json({ success: false, message: 'Record not found' });
-    res.json({ success: true, record });
+    res.json({ success: true, record: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[attendance/PUT]', err);
+    res.status(500).json({ success: false, message: 'Failed to update attendance.' });
   }
 });
 

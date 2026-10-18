@@ -146,7 +146,37 @@ async function sendAlertEmail({ alert, recipientEmail, subject, body, portalUrl 
   }
 }
 
+/**
+ * Generic mail sender — used by auth routes (forgot-password etc.)
+ * Supports the same SMTP transporter and sandbox mode as sendAlertEmail.
+ */
+async function sendMail({ to, subject, text, html }) {
+  const isSandbox = process.env.EMAIL_SANDBOX_MODE === 'true';
+  const targetEmail = isSandbox ? (process.env.EMAIL_SANDBOX_TO || 'admin@university.edu') : to;
+  const fromAddress = process.env.EMAIL_FROM || '"UniManage" <noreply@university.edu>';
+
+  const client = getTransporter();
+
+  if (!client) {
+    // No SMTP configured — log and silently succeed (dev mode)
+    console.log(`[EMAIL SIMULATED] Would send to: ${targetEmail} | Subject: ${subject}`);
+    return { success: true, simulated: true };
+  }
+
+  const info = await client.sendMail({
+    from: fromAddress,
+    to: targetEmail,
+    subject: isSandbox ? `[SANDBOX for ${to}] ${subject}` : subject,
+    text,
+    html: html || buildEmailHtml({ subject, body: text || '' })
+  });
+
+  console.log(`[EMAIL SENT] To: ${targetEmail} | Subject: ${subject} | MessageId: ${info.messageId}`);
+  return { success: true, messageId: info.messageId };
+}
+
 module.exports = {
   sendAlertEmail,
+  sendMail,
   buildEmailHtml
 };

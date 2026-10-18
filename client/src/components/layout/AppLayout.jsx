@@ -4,17 +4,18 @@ import Topbar from './Topbar';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, Brain,
   ClipboardList, Star, Calendar, FileText, GraduationCap,
-  Settings, LogOut, ChevronRight, ShieldAlert, History, Bell
+  Settings, LogOut, ChevronRight, ShieldAlert, History, Bell, UserCheck
 } from 'lucide-react';
 
 const adminNav = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-  { label: 'Users', icon: Users, path: '/admin/users' },
-  { label: 'Courses', icon: BookOpen, path: '/admin/courses' },
-  { label: 'Fee Management', icon: CreditCard, path: '/admin/fees' },
-  { label: 'Analytics', icon: Brain, path: '/admin/analytics' },
-  { label: 'AI Alert Rules', icon: ShieldAlert, path: '/admin/alerts/settings' },
-  { label: 'Alert History', icon: History, path: '/admin/alerts/history' }
+  { label: 'Dashboard',    icon: LayoutDashboard, path: '/admin/dashboard' },
+  { label: 'Users',        icon: Users,           path: '/admin/users' },
+  { label: 'Courses',      icon: BookOpen,        path: '/admin/courses' },
+  { label: 'Enrollment',   icon: UserCheck,       path: '/admin/enrollment' },
+  { label: 'Fee Management', icon: CreditCard,    path: '/admin/fees' },
+  { label: 'Analytics',    icon: Brain,           path: '/admin/analytics' },
+  { label: 'AI Alert Rules', icon: ShieldAlert,   path: '/admin/alerts/settings' },
+  { label: 'Alert History', icon: History,        path: '/admin/alerts/history' }
 ];
 
 const teacherNav = [

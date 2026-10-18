@@ -9,10 +9,26 @@ const Student = require('../models/Student');
 // @access  Admin
 router.post('/', protect, authorize('admin'), async (req, res) => {
   try {
-    const fee = await Fee.create(req.body);
+    // S-06 FIX: Allow-list fields
+    const { student, feeType, amount, dueDate, semester, academicYear, description } = req.body;
+    if (!student || !feeType || !amount || !dueDate) {
+      return res.status(400).json({ success: false, message: 'student, feeType, amount, and dueDate are required.' });
+    }
+    const fee = await Fee.create({
+      student,
+      feeType: String(feeType).trim().slice(0, 100),
+      amount: Math.max(parseFloat(amount) || 0, 0),
+      dueDate,
+      semester: semester ? parseInt(semester) : undefined,
+      academicYear: academicYear ? String(academicYear).trim().slice(0, 20) : undefined,
+      description: description ? String(description).trim().slice(0, 500) : undefined,
+      status: 'unpaid',
+      paidAmount: 0
+    });
     res.status(201).json({ success: true, fee });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[fees/POST]', err);
+    res.status(500).json({ success: false, message: 'Failed to create fee record.' });
   }
 });
 
@@ -22,20 +38,26 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
 router.post('/bulk', protect, authorize('admin'), async (req, res) => {
   try {
     const { studentIds, feeType, amount, dueDate, semester, academicYear } = req.body;
-
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'studentIds array is required.' });
+    }
+    // S-06 FIX: Allow-list bulk fields
     const fees = studentIds.map(studentId => ({
       student: studentId,
-      feeType,
-      amount,
+      feeType: String(feeType || '').trim().slice(0, 100),
+      amount: Math.max(parseFloat(amount) || 0, 0),
       dueDate,
-      semester,
-      academicYear
+      semester: semester ? parseInt(semester) : undefined,
+      academicYear: academicYear ? String(academicYear).trim().slice(0, 20) : undefined,
+      status: 'unpaid',
+      paidAmount: 0
     }));
 
-    const result = await Fee.insertMany(fees);
+    const result = await Fee.insertMany(fees, { ordered: false });
     res.status(201).json({ success: true, count: result.length });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[fees/bulk]', err);
+    res.status(500).json({ success: false, message: 'Failed to create bulk fee records.' });
   }
 });
 
@@ -44,7 +66,8 @@ router.post('/bulk', protect, authorize('admin'), async (req, res) => {
 // @access  All authenticated
 router.get('/', protect, async (req, res) => {
   try {
-    const { studentId, status, feeType, page = 1, limit = 20 } = req.query;
+    const { studentId, status, feeType, page = 1 } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     let query = {};
 
     if (status) query.status = status;
@@ -64,11 +87,12 @@ router.get('/', protect, async (req, res) => {
       .populate('student', 'rollNumber department semester')
       .sort('-dueDate')
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(limit);
 
     res.json({ success: true, total, fees });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[fees/GET]', err);
+    res.status(500).json({ success: false, message: 'Failed to load fee records.' });
   }
 });
 
@@ -81,17 +105,27 @@ router.put('/:id/pay', protect, authorize('admin'), async (req, res) => {
     const fee = await Fee.findById(req.params.id);
     if (!fee) return res.status(404).json({ success: false, message: 'Fee record not found' });
 
-    fee.paidAmount = paidAmount || fee.amount;
+    const paid = parseFloat(paidAmount);
+    if (isNaN(paid) || paid <= 0) {
+      return res.status(400).json({ success: false, message: 'paidAmount must be a positive number.' });
+    }
+    // B-07 FIX: Prevent overpayment
+    if (paid > fee.amount) {
+      return res.status(400).json({ success: false, message: `Payment of PKR ${paid.toLocaleString()} exceeds total fee of PKR ${fee.amount.toLocaleString()}.` });
+    }
+
+    fee.paidAmount = paid;
     fee.paidDate = new Date();
-    fee.paymentMethod = paymentMethod;
-    fee.transactionId = transactionId;
-    fee.remarks = remarks;
+    fee.paymentMethod = paymentMethod ? String(paymentMethod).trim().slice(0, 50) : 'Cash';
+    fee.transactionId = transactionId ? String(transactionId).trim().slice(0, 100) : undefined;
+    fee.remarks = remarks ? String(remarks).trim().slice(0, 500) : undefined;
     fee.status = fee.paidAmount >= fee.amount ? 'paid' : 'partial';
 
     await fee.save();
     res.json({ success: true, fee, message: 'Payment recorded' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[fees/pay]', err);
+    res.status(500).json({ success: false, message: 'Failed to record payment.' });
   }
 });
 
@@ -100,13 +134,26 @@ router.put('/:id/pay', protect, authorize('admin'), async (req, res) => {
 // @access  Admin
 router.put('/:id', protect, authorize('admin'), async (req, res) => {
   try {
-    const fee = await Fee.findByIdAndUpdate(req.params.id, req.body, {
+    // S-06 FIX: Allow-list fields
+    const { feeType, amount, dueDate, semester, academicYear, description, status } = req.body;
+    const allowedUpdate = {};
+    if (feeType      !== undefined) allowedUpdate.feeType      = String(feeType).trim().slice(0, 100);
+    if (amount       !== undefined) allowedUpdate.amount       = Math.max(parseFloat(amount) || 0, 0);
+    if (dueDate      !== undefined) allowedUpdate.dueDate      = dueDate;
+    if (semester     !== undefined) allowedUpdate.semester     = parseInt(semester);
+    if (academicYear !== undefined) allowedUpdate.academicYear = String(academicYear).trim().slice(0, 20);
+    if (description  !== undefined) allowedUpdate.description  = String(description).trim().slice(0, 500);
+    const validStatuses = ['unpaid', 'partial', 'paid', 'waived'];
+    if (status !== undefined && validStatuses.includes(status)) allowedUpdate.status = status;
+
+    const fee = await Fee.findByIdAndUpdate(req.params.id, allowedUpdate, {
       new: true, runValidators: true
     });
     if (!fee) return res.status(404).json({ success: false, message: 'Fee not found' });
     res.json({ success: true, fee });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[fees/PUT]', err);
+    res.status(500).json({ success: false, message: 'Failed to update fee record.' });
   }
 });
 
@@ -118,7 +165,8 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
     await Fee.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Fee record deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[fees/DELETE]', err);
+    res.status(500).json({ success: false, message: 'Failed to delete fee record.' });
   }
 });
 
@@ -137,25 +185,32 @@ router.get('/student/:studentId/summary', protect, async (req, res) => {
 
     const fees = await Fee.find({ student: req.params.studentId });
 
+    // B-07 FIX: Correct totals that include partial and waived statuses
     const summary = {
       totalDue: fees.reduce((acc, f) => acc + f.amount, 0),
-      totalPaid: fees.reduce((acc, f) => acc + f.paidAmount, 0),
-      totalPending: fees.filter(f => f.status === 'unpaid').reduce((acc, f) => acc + f.amount, 0),
-      overdue: fees.filter(f => f.status === 'unpaid' && new Date(f.dueDate) < new Date()),
-      upcoming: fees.filter(f => f.status === 'unpaid' && new Date(f.dueDate) >= new Date()),
+      totalPaid: fees.reduce((acc, f) => acc + (f.paidAmount || 0), 0),
+      // Only count genuinely unpaid/partial as "pending"
+      totalPending: fees
+        .filter(f => f.status === 'unpaid' || f.status === 'partial')
+        .reduce((acc, f) => acc + (f.amount - (f.paidAmount || 0)), 0),
+      overdue: fees.filter(f => (f.status === 'unpaid' || f.status === 'partial') && new Date(f.dueDate) < new Date()),
+      upcoming: fees.filter(f => (f.status === 'unpaid' || f.status === 'partial') && new Date(f.dueDate) >= new Date()),
       byType: {}
     };
 
     fees.forEach(f => {
       if (!summary.byType[f.feeType]) summary.byType[f.feeType] = { total: 0, paid: 0, pending: 0 };
       summary.byType[f.feeType].total += f.amount;
-      summary.byType[f.feeType].paid += f.paidAmount;
-      if (f.status !== 'paid') summary.byType[f.feeType].pending += f.amount - f.paidAmount;
+      summary.byType[f.feeType].paid += f.paidAmount || 0;
+      if (f.status !== 'paid' && f.status !== 'waived') {
+        summary.byType[f.feeType].pending += f.amount - (f.paidAmount || 0);
+      }
     });
 
     res.json({ success: true, summary, fees });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[fees/summary]', err);
+    res.status(500).json({ success: false, message: 'Failed to load fee summary.' });
   }
 });
 

@@ -18,7 +18,7 @@ const UserSchema = new mongoose.Schema({
   password: {
     type: String,
     required: [true, 'Password is required'],
-    minlength: [6, 'Password must be at least 6 characters'],
+    minlength: [8, 'Password must be at least 8 characters'],
     select: false
   },
   role: {
@@ -35,8 +35,24 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Security fields (S-01 lockout, S-05 token version)
+  failedLoginCount: {
+    type: Number,
+    default: 0,
+    select: false
+  },
+  lockUntil: {
+    type: Date,
+    select: false
+  },
+  // Password reset
   passwordResetToken: String,
   passwordResetExpires: Date,
+  // Force password change on first login (admin-created accounts)
+  mustChangePassword: {
+    type: Boolean,
+    default: false
+  },
   lastLogin: Date
 }, { timestamps: true });
 

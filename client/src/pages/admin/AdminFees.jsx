@@ -71,8 +71,8 @@ export default function AdminFees() {
       {/* Summary */}
       <div className="grid-3 mb-24">
         {[
-          { label: 'Total Collected', value: `₹${(totalCollected / 1000).toFixed(0)}K`, icon: <CheckCircle size={20}/>, color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
-          { label: 'Pending Amount', value: `₹${(totalPending / 1000).toFixed(0)}K`, icon: <Clock size={20}/>, color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+          { label: 'Total Collected', value: `PKR ${totalCollected.toLocaleString()}`, icon: <CheckCircle size={20}/>, color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+          { label: 'Pending Amount', value: `PKR ${totalPending.toLocaleString()}`, icon: <Clock size={20}/>, color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
           { label: 'Overdue Records', value: overdueCount, icon: <CreditCard size={20}/>, color: '#ef4444', bg: 'rgba(239,68,68,0.12)' }
         ].map(s => (
           <div key={s.label} className="stat-card">
@@ -104,7 +104,7 @@ export default function AdminFees() {
                     <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fee.student?.rollNumber}</div>
                   </td>
                   <td>{fee.feeType}</td>
-                  <td style={{ fontWeight: 700 }}>₹{fee.amount?.toLocaleString()}</td>
+                  <td style={{ fontWeight: 700 }}>PKR {fee.amount?.toLocaleString()}</td>
                   <td style={{ fontSize: 12, color: new Date(fee.dueDate) < new Date() && fee.status !== 'paid' ? 'var(--danger)' : 'var(--text-secondary)' }}>
                     {new Date(fee.dueDate).toLocaleDateString()}
                     {new Date(fee.dueDate) < new Date() && fee.status !== 'paid' && ' (Overdue)'}
@@ -149,7 +149,7 @@ export default function AdminFees() {
                     {['Tuition', 'Library', 'Laboratory', 'Examination', 'Sports', 'Transport', 'Hostel', 'Other'].map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
-                <div className="form-group"><label className="form-label">Amount (₹) *</label>
+                <div className="form-group"><label className="form-label">Amount (PKR) *</label>
                   <input className="form-input" type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="50000" />
                 </div>
                 <div className="form-group"><label className="form-label">Due Date *</label>
@@ -179,7 +179,7 @@ export default function AdminFees() {
             <div className="modal-header"><h3 style={{ fontSize: 17, fontWeight: 700 }}>Record Payment</h3><button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowPayModal(false)}>✕</button></div>
             <div className="modal-body">
               <div style={{ padding: '12px 16px', background: 'var(--bg-surface)', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-                <strong>{selectedFee.student?.user?.name}</strong> · {selectedFee.feeType} · Due: ₹{selectedFee.amount?.toLocaleString()}
+                <strong>{selectedFee.student?.user?.name}</strong> · {selectedFee.feeType} · Due: PKR {selectedFee.amount?.toLocaleString()}
               </div>
               <div className="grid-2">
                 <div className="form-group"><label className="form-label">Amount Paid *</label>

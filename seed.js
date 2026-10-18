@@ -2,8 +2,20 @@
  * Database Seeder — Seeds the UMS database with realistic demo data
  * Run: node seed.js
  * Clear: node seed.js --clear
+ *
+ * ⚠️  S-02 SECURITY: This script MUST NOT run in production.
+ *     It creates accounts with known demo passwords.
  */
 require('dotenv').config();
+
+// S-02 FIX: Block seeding in production environment
+if (process.env.NODE_ENV === 'production') {
+  console.error('❌ SEED BLOCKED: Cannot run seed.js in production environment.');
+  console.error('   This script creates demo accounts with known passwords.');
+  console.error('   Use your admin panel to create accounts manually.');
+  process.exit(1);
+}
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const User = require('./models/User');

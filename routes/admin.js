@@ -45,7 +45,8 @@ router.get('/dashboard', protect, authorize('admin'), async (req, res) => {
       atRiskStudents: lowAttendanceStudents
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[admin/dashboard]', err);
+    res.status(500).json({ success: false, message: 'Failed to load dashboard data.' });
   }
 });
 
@@ -106,7 +107,8 @@ router.post('/users', protect, authorize('admin'), async (req, res) => {
 
     res.status(201).json({ success: true, user, profile });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[admin/users/POST]', err);
+    res.status(500).json({ success: false, message: 'Failed to create user.' });
   }
 });
 
@@ -115,25 +117,30 @@ router.post('/users', protect, authorize('admin'), async (req, res) => {
 // @access  Admin
 router.get('/users', protect, authorize('admin'), async (req, res) => {
   try {
-    const { role, page = 1, limit = 20, search } = req.query;
+    const { role, page = 1 } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const search = req.query.search;
     let query = {};
     if (role) query.role = role;
     if (search) {
+      // H-08 FIX: escape special regex characters
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { name: { $regex: escaped, $options: 'i' } },
+        { email: { $regex: escaped, $options: 'i' } }
       ];
     }
 
     const total = await User.countDocuments(query);
     const users = await User.find(query)
       .skip((page - 1) * limit)
-      .limit(parseInt(limit))
+      .limit(limit)
       .sort('-createdAt');
 
     res.json({ success: true, total, users });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[admin/users/GET]', err);
+    res.status(500).json({ success: false, message: 'Failed to load users.' });
   }
 });
 
@@ -142,16 +149,41 @@ router.get('/users', protect, authorize('admin'), async (req, res) => {
 // @access  Admin
 router.put('/users/:id', protect, authorize('admin'), async (req, res) => {
   try {
+    const target = await User.findById(req.params.id);
+    if (!target) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // S-07 FIX: Guard against demoting or deactivating the last active admin (same as DELETE)
     const { name, email, role, isActive } = req.body;
+    const isBeingDeactivated = isActive === false || isActive === 'false';
+    const isBeingDemoted = role && role !== 'admin' && target.role === 'admin';
+
+    if (target.role === 'admin' && (isBeingDeactivated || isBeingDemoted)) {
+      // Prevent self-demotion
+      if (req.params.id === req.user._id.toString()) {
+        return res.status(400).json({ success: false, message: 'You cannot demote or deactivate your own admin account.' });
+      }
+      const activeAdminCount = await User.countDocuments({ role: 'admin', isActive: true });
+      if (activeAdminCount <= 1) {
+        return res.status(400).json({ success: false, message: 'Cannot deactivate or demote the last active admin account.' });
+      }
+    }
+
+    // S-06 FIX: Allow-list updatable fields
+    const allowedUpdate = {};
+    if (name     !== undefined) allowedUpdate.name     = String(name).trim().slice(0, 100);
+    if (email    !== undefined) allowedUpdate.email    = String(email).trim().toLowerCase();
+    if (role     !== undefined && ['student', 'teacher', 'admin'].includes(role)) allowedUpdate.role = role;
+    if (isActive !== undefined) allowedUpdate.isActive = Boolean(isActive === true || isActive === 'true');
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { name, email, role, isActive },
+      allowedUpdate,
       { new: true, runValidators: true }
     );
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, user });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[admin/users/PUT]', err);
+    res.status(500).json({ success: false, message: 'Failed to update user.' });
   }
 });
 
@@ -182,7 +214,8 @@ router.delete('/users/:id', protect, authorize('admin'), async (req, res) => {
 
     res.json({ success: true, message: 'User deactivated. All academic records are preserved.' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[admin/users/DELETE]', err);
+    res.status(500).json({ success: false, message: 'Failed to deactivate user.' });
   }
 });
 
