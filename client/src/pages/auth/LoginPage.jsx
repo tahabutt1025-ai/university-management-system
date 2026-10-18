@@ -35,7 +35,12 @@ export default function LoginPage() {
     try {
       const user = await login(form.email, form.password);
       toast.success(`Welcome back, ${user.name.split(' ')[0]}! 👋`);
-      navigate(`/${user.role}/dashboard`);
+      // N-5 FIX: Admin-created accounts must change their password on first login
+      if (user.mustChangePassword) {
+        navigate('/change-password');
+      } else {
+        navigate(`/${user.role}/dashboard`);
+      }
     } catch (err) {
       const msg = err.response?.data?.message || 'Login failed. Check your credentials.';
       toast.error(msg);

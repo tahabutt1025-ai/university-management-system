@@ -96,7 +96,7 @@ export default function AdminCourses() {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <span className="badge badge-info">Sem {course.semester}</span>
                   <span className="badge badge-primary">{course.creditHours} Credits</span>
-                  <span className="badge badge-success">{course.enrolledStudents?.length || 0}/{course.maxStudents}</span>
+                  <span className="badge badge-success">{course.enrolledStudentCount || 0}/{course.maxStudents || 50}</span>
                 </div>
                 {course.teacher?.user?.name && (
                   <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>

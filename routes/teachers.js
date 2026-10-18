@@ -38,7 +38,15 @@ router.get('/me', protect, authorize('teacher'), async (req, res) => {
   try {
     const teacher = await Teacher.findOne({ user: req.user._id })
       .populate('user', 'name email phone avatar')
-      .populate({ path: 'assignedCourses', populate: { path: 'enrolledStudents', select: 'rollNumber department semester' } });
+      .populate({
+        path: 'assignedCourses',
+        populate: {
+          path: 'enrolledStudents',
+          select: 'rollNumber department semester user',
+          // N-2 FIX: nested populate user.name so teacher grade/attendance pages show student names
+          populate: { path: 'user', select: 'name' }
+        }
+      });
 
     if (!teacher) {
       return res.status(404).json({ success: false, message: 'Teacher profile not found' });

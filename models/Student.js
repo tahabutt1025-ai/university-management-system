@@ -42,6 +42,12 @@ const StudentSchema = new mongoose.Schema({
   guardianPhone: String,
   address: String,
   dateOfBirth: Date,
+  // N-4 FIX: bloodGroup was in the allow-list but not in the schema
+  bloodGroup: {
+    type: String,
+    enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', ''],
+    default: ''
+  },
   cgpa: {
     type: Number,
     default: 0,

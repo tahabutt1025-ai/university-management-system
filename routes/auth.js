@@ -25,11 +25,13 @@ const sendTokenResponse = (user, statusCode, res) => {
     success: true,
     token,
     user: {
-      id:     user._id,
-      name:   user.name,
-      email:  user.email,
-      role:   user.role,
-      avatar: user.avatar
+      id:                user._id,
+      name:              user.name,
+      email:             user.email,
+      role:              user.role,
+      avatar:            user.avatar,
+      // N-5 FIX: client redirects to /change-password on first login
+      mustChangePassword: user.mustChangePassword || false
     }
   });
 };
@@ -45,7 +47,9 @@ const passwordPolicy = body('password')
 // @access  Public
 router.post('/register', [
   body('name').trim().notEmpty().withMessage('Name is required'),
-  body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
+  // N-3 FIX: normalizeEmail() strips Gmail dots (first.last → firstlast) causing login mismatches.
+  // Use a safe custom sanitiser instead: trim + lowercase only.
+  body('email').trim().isEmail().customSanitizer(v => v.trim().toLowerCase()).withMessage('Please provide a valid email'),
   passwordPolicy,
   // Role is ignored — public registration always creates a student
 ], async (req, res) => {
@@ -66,7 +70,9 @@ router.post('/register', [
 
     const user = await User.create({ name, email, password, role });
 
-    const rollNumber = profileData.rollNumber || `STU-${Date.now()}`;
+    // N-6 FIX: Never accept a caller-supplied rollNumber — auto-generate it.
+    // Admins assign the real rollNumber via POST /api/admin/users.
+    const rollNumber = `STU-${Date.now()}`;
     await Student.create({
       user: user._id,
       rollNumber,
@@ -86,7 +92,7 @@ router.post('/register', [
 // @desc    Login user
 // @access  Public
 router.post('/login', [
-  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
+  body('email').trim().isEmail().customSanitizer(v => v.trim().toLowerCase()).withMessage('Valid email required'),
   body('password').notEmpty().withMessage('Password required')
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -228,7 +234,7 @@ router.put('/updateprofile', protect, async (req, res) => {
 // @desc    Request a password reset link
 // @access  Public
 router.post('/forgot-password', [
-  body('email').isEmail().normalizeEmail().withMessage('Valid email required')
+  body('email').trim().isEmail().customSanitizer(v => v.trim().toLowerCase()).withMessage('Valid email required')
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

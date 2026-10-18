@@ -18,14 +18,9 @@ router.get('/', protect, async (req, res) => {
     if (isActive !== undefined) query.isActive = isActive === 'true';
 
     const total = await Course.countDocuments(query);
-    const courses = await Course.find(query)
-      .populate({ path: 'teacher', populate: { path: 'user', select: 'name email' } })
-      // H-01 FIX: Only return count of enrolled students, not their names/emails
-      .select('-enrolledStudents')
-      .skip((page - 1) * limit)
-      .limit(limit);
 
-    // Append enrollment count without exposing student details
+    // N-7 FIX: Removed the first Course.find (select -enrolledStudents) that was fetched
+    // and discarded. This query builds the actual response.
     const result = await Course.find(query)
       .populate({ path: 'teacher', populate: { path: 'user', select: 'name email' } })
       .select('courseName courseCode department semester creditHours teacher schedule isActive maxStudents description')
@@ -33,7 +28,7 @@ router.get('/', protect, async (req, res) => {
       .limit(limit)
       .lean();
 
-    // Add student count per course
+    // Add student count per course without exposing student names/emails (H-01)
     const courseIds = result.map(c => c._id);
     const enrollmentCounts = await Course.aggregate([
       { $match: { _id: { $in: courseIds } } },

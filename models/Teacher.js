@@ -35,7 +35,9 @@ const TeacherSchema = new mongoose.Schema({
     default: Date.now
   },
   officeHours: String,
-  officeRoom: String
+  officeRoom: String,
+  // N-4 FIX: bio was in the allow-list but not in the schema
+  bio: { type: String, maxlength: 1000 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Teacher', TeacherSchema);

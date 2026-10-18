@@ -18,8 +18,12 @@ const AssignmentSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    required: [true, 'Assignment description is required']
+    // N-4 FIX: was required: true which caused a generic 500 when omitted;
+    // route-level validation provides the user-friendly 400 message instead
+    required: false
   },
+  // N-4 FIX: instructions field was in allow-list but not in schema
+  instructions: { type: String, maxlength: 5000 },
   dueDate: {
     type: Date,
     required: true

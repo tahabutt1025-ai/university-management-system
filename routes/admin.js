@@ -74,14 +74,36 @@ async function getAtRiskStudents() {
 // @access  Admin
 router.post('/users', protect, authorize('admin'), async (req, res) => {
   try {
-    const { name, email, password, role, ...profileData } = req.body;
+    const { name, password, role, ...profileData } = req.body;
+    // N-3 FIX: normalize email consistently (trim + lowercase, no dot-stripping)
+    const email = req.body.email?.trim().toLowerCase();
+
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ success: false, message: 'name, email, password and role are required.' });
+    }
+
+    // N-8 FIX: Enforce the same password policy used by public registration
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+    }
+    if (!/[a-zA-Z]/.test(password)) {
+      return res.status(400).json({ success: false, message: 'Password must contain at least one letter.' });
+    }
+    if (!/[0-9]/.test(password)) {
+      return res.status(400).json({ success: false, message: 'Password must contain at least one number.' });
+    }
+
+    if (!['student', 'teacher', 'admin'].includes(role)) {
+      return res.status(400).json({ success: false, message: 'role must be student, teacher or admin.' });
+    }
 
     const existing = await User.findOne({ email });
     if (existing) {
       return res.status(400).json({ success: false, message: 'Email already exists' });
     }
 
-    const user = await User.create({ name, email, password, role });
+    // N-5 FIX: Admin-created accounts must change their password on first login
+    const user = await User.create({ name, email, password, role, mustChangePassword: true });
 
     let profile = null;
     if (role === 'student') {

@@ -26,7 +26,8 @@ router.get('/rules', protect, authorize('admin'), async (req, res) => {
     const rules = await AlertRule.find().sort({ code: 1 });
     res.json({ success: true, count: rules.length, rules });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[alerts/rules/GET]', err);
+    res.status(500).json({ success: false, message: 'Failed to load alert rules.' });
   }
 });
 
@@ -52,7 +53,8 @@ router.put('/rules/:id', protect, authorize('admin'), async (req, res) => {
     await rule.save();
     res.json({ success: true, message: 'Alert rule updated successfully', rule });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[alerts/rules/PUT]', err);
+    res.status(500).json({ success: false, message: 'Failed to update alert rule.' });
   }
 });
 
@@ -64,7 +66,8 @@ router.post('/run', protect, authorize('admin'), async (req, res) => {
     const results = await runAlertRulesEngine();
     res.json({ success: true, message: `Alert engine completed. Sent: ${results.sent}, Skipped: ${results.skipped}, Failed: ${results.failed}`, results });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[alerts/run]', err);
+    res.status(500).json({ success: false, message: 'Failed to run alert engine.' });
   }
 });
 
@@ -73,7 +76,9 @@ router.post('/run', protect, authorize('admin'), async (req, res) => {
 // @access  Admin (all), Student/Teacher (own)
 router.get('/', protect, async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, ruleCode, search } = req.query;
+    const { page = 1, status, ruleCode, search } = req.query;
+    // H-08 FIX: cap limit at 100 and escape regex to prevent ReDoS
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     let query = {};
 
     if (req.user.role !== 'admin') {
@@ -81,11 +86,13 @@ router.get('/', protect, async (req, res) => {
     }
 
     if (status) query.status = status;
-    if (ruleCode) query.ruleCode = ruleCode;
+    if (ruleCode) query.ruleCode = String(ruleCode).trim().slice(0, 50);
     if (search) {
+      // H-08 FIX: escape user-supplied string before using as regex
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { recipientEmail: { $regex: search, $options: 'i' } },
-        { subject: { $regex: search, $options: 'i' } }
+        { recipientEmail: { $regex: escapedSearch, $options: 'i' } },
+        { subject: { $regex: escapedSearch, $options: 'i' } }
       ];
     }
 
@@ -95,7 +102,7 @@ router.get('/', protect, async (req, res) => {
       .populate('recipient', 'name email role')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(limit);
 
     res.json({
       success: true,
@@ -105,7 +112,8 @@ router.get('/', protect, async (req, res) => {
       alerts
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[alerts/GET]', err);
+    res.status(500).json({ success: false, message: 'Failed to load alerts.' });
   }
 });
 
